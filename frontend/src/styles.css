@@ -145,6 +145,31 @@ button:disabled {
   color: #b42318;
 }
 
+.detail-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #263a5f;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mode-badge.openai {
+  background: #e7f8ef;
+  color: #137a44;
+}
+
 .query-form,
 .document-form {
   display: grid;
@@ -244,8 +269,41 @@ input:focus {
   gap: 14px;
 }
 
-.timeline h4 {
+.timeline h4,
+.evidence-list h4 {
   margin: 0;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.evidence-card {
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.evidence-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evidence-card-header span {
+  color: #667085;
+  font-size: 0.84rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.evidence-card p {
+  margin: 10px 0 0;
+  color: #344054;
 }
 
 .timeline-item {

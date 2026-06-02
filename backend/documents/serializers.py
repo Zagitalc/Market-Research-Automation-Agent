@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from documents.models import Document, DocumentChunk
+from documents.services.chunker import create_chunks_for_document
 
 
 class DocumentChunkSerializer(serializers.ModelSerializer):
@@ -20,9 +21,5 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         document = super().create(validated_data)
-        DocumentChunk.objects.create(
-            document=document,
-            chunk_text=document.content[:1200],
-            embedding=[],
-        )
+        create_chunks_for_document(document)
         return document

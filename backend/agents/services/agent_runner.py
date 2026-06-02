@@ -1,4 +1,6 @@
 from agents.models import AgentStep
+from agents.services.embedding_provider import get_ai_mode
+from agents.services.llm_client import synthesize_final_answer
 from documents.services.retriever import retrieve_relevant_chunks
 from research.models import ResearchRun
 
@@ -16,25 +18,31 @@ def run_research_agent(research_run: ResearchRun) -> ResearchRun:
     AgentStep.objects.create(
         research_run=research_run,
         step_type=AgentStep.StepType.PLAN,
-        input_data={"query": query},
-        output_data={"plan": plan},
+        input_data={"query": query, "ai_mode": get_ai_mode()},
+        output_data={"plan": plan, "ai_mode": get_ai_mode()},
     )
 
     chunks = retrieve_relevant_chunks(query)
     AgentStep.objects.create(
         research_run=research_run,
         step_type=AgentStep.StepType.RETRIEVE,
-        input_data={"query": query, "limit": 3},
-        output_data={"chunks": chunks},
+        input_data={"query": query, "limit": 3, "ai_mode": get_ai_mode()},
+        output_data={
+            "chunks": chunks,
+            "retrieved_chunk_count": len(chunks),
+            "ai_mode": get_ai_mode(),
+        },
     )
 
     AgentStep.objects.create(
         research_run=research_run,
         step_type=AgentStep.StepType.TOOL_CALL,
-        input_data={"tool": "market_size_estimator", "query": query},
+        input_data={"tool": "market_size_estimator", "query": query, "ai_mode": get_ai_mode()},
         output_data={
             "tool": "market_size_estimator",
-            "result": "Mock tool output: market signals found in available sources.",
+            "result": "RAG v1 diagnostic tool: retrieved evidence is available for answer synthesis.",
+            "evidence_count": len(chunks),
+            "ai_mode": get_ai_mode(),
         },
     )
 
@@ -46,16 +54,25 @@ def run_research_agent(research_run: ResearchRun) -> ResearchRun:
         output_data={
             "enough_evidence": enough_evidence,
             "notes": "Evidence is sufficient for a portfolio-demo answer." if enough_evidence else "No documents were available.",
+            "ai_mode": get_ai_mode(),
         },
     )
 
-    final_answer = _compose_final_answer(query, chunks, enough_evidence)
+    synthesis = synthesize_final_answer(query, chunks)
+    final_answer = synthesis["answer"]
     confidence = 0.78 if enough_evidence else 0.42
     AgentStep.objects.create(
         research_run=research_run,
         step_type=AgentStep.StepType.FINAL,
-        input_data={"query": query},
-        output_data={"final_answer": final_answer, "confidence_score": confidence},
+        input_data={"query": query, "chunk_ids": [chunk["chunk_id"] for chunk in chunks], "ai_mode": get_ai_mode()},
+        output_data={
+            "final_answer": final_answer,
+            "confidence_score": confidence,
+            "ai_mode": synthesis["ai_mode"],
+            "model": synthesis["model"],
+            "error": synthesis["error"],
+            "evidence": chunks,
+        },
     )
 
     research_run.status = ResearchRun.Status.COMPLETED
@@ -63,18 +80,3 @@ def run_research_agent(research_run: ResearchRun) -> ResearchRun:
     research_run.confidence_score = confidence
     research_run.save(update_fields=["status", "final_answer", "confidence_score", "updated_at"])
     return research_run
-
-
-def _compose_final_answer(query: str, chunks: list[dict], enough_evidence: bool) -> str:
-    if not enough_evidence:
-        return (
-            f"Mock answer for '{query}': no source documents are available yet. "
-            "Add documents to improve retrieval-grounded analysis."
-        )
-
-    source_titles = sorted({chunk["document_title"] for chunk in chunks})
-    return (
-        f"Mock answer for '{query}': the retrieved evidence suggests a market with clear research signals. "
-        f"This draft is grounded in {len(chunks)} chunk(s) from: {', '.join(source_titles)}. "
-        "Replace this function with real LLM synthesis when model integration is added."
-    )

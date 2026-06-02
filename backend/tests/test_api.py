@@ -38,6 +38,7 @@ def test_document_create_list_and_detail(api_client):
     detail_response = api_client.get(f"/api/documents/{document_id}/")
     assert detail_response.status_code == 200
     assert detail_response.json()["chunks"][0]["chunk_text"] == payload["content"]
+    assert detail_response.json()["chunks"][0]["embedding"]
 
 
 @pytest.mark.django_db
@@ -47,7 +48,7 @@ def test_research_run_creation_completes_mock_agent_flow(api_client):
         source_type="note",
         content="Automation platforms are moving from dashboards to agentic workflows.",
     )
-    DocumentChunk.objects.create(document=document, chunk_text=document.content, embedding=[])
+    DocumentChunk.objects.create(document=document, chunk_text=document.content, embedding=[1.0, 0.0])
 
     response = api_client.post(
         "/api/research-runs/",
@@ -63,6 +64,14 @@ def test_research_run_creation_completes_mock_agent_flow(api_client):
 
     step_types = list(AgentStep.objects.values_list("step_type", flat=True))
     assert step_types == ["plan", "retrieve", "tool_call", "reflect", "final"]
+
+    retrieve_step = AgentStep.objects.get(step_type=AgentStep.StepType.RETRIEVE)
+    assert retrieve_step.output_data["chunks"][0]["document_title"] == "Market pulse"
+    assert retrieve_step.output_data["chunks"][0]["retrieval_mode"] == "embedding"
+
+    final_step = AgentStep.objects.get(step_type=AgentStep.StepType.FINAL)
+    assert final_step.output_data["ai_mode"] == "mock"
+    assert final_step.output_data["evidence"]
 
 
 @pytest.mark.django_db

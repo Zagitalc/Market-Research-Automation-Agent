@@ -98,3 +98,8 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "false").lower() == "true"
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4.1-mini")
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+AI_MOCK_MODE = os.getenv("AI_MOCK_MODE", "true").lower() == "true"

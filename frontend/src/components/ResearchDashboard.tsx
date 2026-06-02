@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { AgentStep, ResearchRun, api } from "../api/client";
+import { AgentStep, ResearchRun, RetrievalEvidence, api } from "../api/client";
 
 const stepLabels: Record<AgentStep["step_type"], string> = {
   plan: "Plan",
@@ -45,6 +45,8 @@ export function ResearchDashboard() {
     () => runs.find((run) => run.id === selectedRunId) ?? runs[0],
     [runs, selectedRunId],
   );
+  const selectedEvidence = useMemo(() => getEvidence(selectedRun), [selectedRun]);
+  const selectedAiMode = useMemo(() => getAiMode(selectedRun), [selectedRun]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -120,9 +122,13 @@ export function ResearchDashboard() {
                       : `${Math.round(selectedRun.confidence_score * 100)}%`}
                   </p>
                 </div>
-                <span className={`status-pill ${selectedRun.status}`}>{selectedRun.status}</span>
+                <div className="detail-badges">
+                  <span className={`mode-badge ${selectedAiMode}`}>{selectedAiMode === "openai" ? "OpenAI mode" : "Mock mode"}</span>
+                  <span className={`status-pill ${selectedRun.status}`}>{selectedRun.status}</span>
+                </div>
               </div>
               <div className="answer-box">{selectedRun.final_answer || "Waiting for answer..."}</div>
+              <EvidenceList evidence={selectedEvidence} />
               <AgentTimeline steps={selectedRun.steps} />
             </>
           ) : (
@@ -131,6 +137,24 @@ export function ResearchDashboard() {
         </div>
       </div>
     </section>
+  );
+}
+
+function EvidenceList({ evidence }: { evidence: RetrievalEvidence[] }) {
+  return (
+    <div className="evidence-list" aria-label="Retrieved evidence">
+      <h4>Retrieved evidence</h4>
+      {evidence.length === 0 ? <p className="muted">No evidence retrieved yet.</p> : null}
+      {evidence.map((chunk) => (
+        <article className="evidence-card" key={chunk.chunk_id}>
+          <div className="evidence-card-header">
+            <strong>{chunk.document_title}</strong>
+            <span>{chunk.retrieval_mode} · {Math.round(chunk.score * 100)}%</span>
+          </div>
+          <p>{chunk.chunk_text}</p>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -150,4 +174,17 @@ function AgentTimeline({ steps }: { steps: AgentStep[] }) {
       ))}
     </div>
   );
+}
+
+function getEvidence(run?: ResearchRun): RetrievalEvidence[] {
+  if (!run) return [];
+  const retrieveStep = run.steps.find((step) => step.step_type === "retrieve");
+  return retrieveStep?.output_data.chunks ?? [];
+}
+
+function getAiMode(run?: ResearchRun): "mock" | "openai" {
+  if (!run) return "mock";
+  const finalStep = run.steps.find((step) => step.step_type === "final");
+  const retrieveStep = run.steps.find((step) => step.step_type === "retrieve");
+  return finalStep?.output_data.ai_mode ?? retrieveStep?.output_data.ai_mode ?? "mock";
 }

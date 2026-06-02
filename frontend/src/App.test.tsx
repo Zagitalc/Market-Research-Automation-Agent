@@ -42,6 +42,34 @@ describe("App", () => {
           output_data: { plan: ["retrieve"] },
           created_at: "2026-01-01T00:00:00Z",
         },
+        {
+          id: 2,
+          research_run: 1,
+          step_type: "retrieve",
+          input_data: {},
+          output_data: {
+            ai_mode: "mock",
+            chunks: [
+              {
+                chunk_id: 10,
+                document_id: 7,
+                document_title: "Market pulse",
+                chunk_text: "Automation platforms are moving toward agentic workflows.",
+                score: 0.82,
+                retrieval_mode: "embedding",
+              },
+            ],
+          },
+          created_at: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: 3,
+          research_run: 1,
+          step_type: "final",
+          input_data: {},
+          output_data: { ai_mode: "mock", final_answer: "Mock answer for AI research automation." },
+          created_at: "2026-01-01T00:00:00Z",
+        },
       ],
     };
     vi.stubGlobal(
@@ -58,6 +86,10 @@ describe("App", () => {
 
     expect(await screen.findByText("Mock answer for AI research automation.")).toBeInTheDocument();
     expect(screen.getByText("Plan")).toBeInTheDocument();
+    expect(screen.getByText("Mock mode")).toBeInTheDocument();
+    expect(screen.getByText("Market pulse")).toBeInTheDocument();
+    expect(screen.getByText("embedding · 82%")).toBeInTheDocument();
+    expect(screen.getByText("Automation platforms are moving toward agentic workflows.")).toBeInTheDocument();
   });
 
   it("adds and lists documents", async () => {

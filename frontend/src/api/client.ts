@@ -22,9 +22,26 @@ export type AgentStep = {
   id: number;
   research_run: number;
   step_type: "plan" | "retrieve" | "tool_call" | "reflect" | "final";
-  input_data: Record<string, unknown>;
-  output_data: Record<string, unknown>;
+  input_data: AgentStepData;
+  output_data: AgentStepData;
   created_at: string;
+};
+
+export type RetrievalEvidence = {
+  chunk_id: number;
+  document_id: number;
+  document_title: string;
+  chunk_text: string;
+  score: number;
+  retrieval_mode: "embedding" | "keyword";
+  ai_mode?: "mock" | "openai";
+};
+
+export type AgentStepData = Record<string, unknown> & {
+  ai_mode?: "mock" | "openai";
+  chunks?: RetrievalEvidence[];
+  evidence?: RetrievalEvidence[];
+  final_answer?: string;
 };
 
 export type ResearchRun = {
