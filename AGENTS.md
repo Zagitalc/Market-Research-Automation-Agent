@@ -52,3 +52,15 @@ cd backend
 .venv/bin/python manage.py check
 .venv/bin/pytest
 ```
+## Current status
+
+Implemented:
+- RAG v1 with JSONField embeddings
+- optional OpenAI mode
+- mock-first local development
+- evidence scoring and display
+- delete/clear controls for documents and research runs
+- Codex skills for Django RAG, safe refactor, and portfolio polish
+
+Next planned milestone:
+- LangGraph orchestration with reflection-based retrieval retry
