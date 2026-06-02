@@ -119,10 +119,16 @@ npm run dev
 | GET | `/api/documents/` | List documents |
 | POST | `/api/documents/` | Create a document, chunks, and chunk embeddings |
 | GET | `/api/documents/<id>/` | Retrieve one document |
+| DELETE | `/api/documents/<id>/` | Delete one document and cascade-delete its chunks |
+| DELETE | `/api/documents/clear/` | Delete all documents and chunks |
 | GET | `/api/research-runs/` | List research runs |
 | POST | `/api/research-runs/` | Create a research run and execute the RAG v1 agent |
 | GET | `/api/research-runs/<id>/` | Retrieve one research run |
+| DELETE | `/api/research-runs/<id>/` | Delete one research run and cascade-delete its agent steps |
+| DELETE | `/api/research-runs/clear/` | Delete all research runs and agent steps |
 | GET | `/api/research-runs/<id>/steps/` | List agent steps for a run |
+
+Clear-all responses include `deleted` for top-level records, `deleted_rows` for all database rows including cascades, and `details` for Django's per-model delete breakdown.
 
 ## Agent Flow
 
@@ -150,6 +156,10 @@ The orchestration entry point lives in `backend/agents/services/agent_runner.py`
    - document title
    - retrieval score
    - full agent step timeline
+5. Delete one document and confirm it disappears from the Documents list.
+6. Add multiple documents, click **Clear all**, confirm the prompt, and verify the empty state.
+7. Delete one research run and confirm the run list/detail selection updates.
+8. Add multiple research runs, click **Clear history**, confirm the prompt, and verify no history remains.
 
 ## pgvector Readiness
 

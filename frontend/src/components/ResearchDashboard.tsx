@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 
 import { AgentStep, ResearchRun, RetrievalEvidence, api } from "../api/client";
 
@@ -16,6 +16,7 @@ export function ResearchDashboard() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,6 +67,45 @@ export function ResearchDashboard() {
     }
   }
 
+  async function handleDeleteRun(event: MouseEvent<HTMLButtonElement>, run: ResearchRun) {
+    event.stopPropagation();
+    if (!window.confirm(`Delete research run "${run.user_query}" and its agent steps?`)) return;
+
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await api.deleteResearchRun(run.id);
+      setRuns((current) => {
+        const remaining = current.filter((item) => item.id !== run.id);
+        if (selectedRunId === run.id) {
+          setSelectedRunId(remaining[0]?.id ?? null);
+        }
+        return remaining;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete research run");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleClearRuns() {
+    if (runs.length === 0) return;
+    if (!window.confirm("Delete all research runs and agent steps?")) return;
+
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await api.clearResearchRuns();
+      setRuns([]);
+      setSelectedRunId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear research runs");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <section className="workspace-panel" aria-labelledby="research-heading">
       <div className="panel-header">
@@ -73,7 +113,12 @@ export function ResearchDashboard() {
           <h2 id="research-heading">Research runs</h2>
           <p>Submit a market question and inspect the mock agent trace.</p>
         </div>
-        <span className="status-pill">{runs.length} runs</span>
+        <div className="detail-badges">
+          <button className="danger-button subtle" disabled={isDeleting || runs.length === 0} onClick={handleClearRuns} type="button">
+            Clear history
+          </button>
+          <span className="status-pill">{runs.length} runs</span>
+        </div>
       </div>
 
       <form className="query-form" onSubmit={handleSubmit}>
@@ -97,15 +142,28 @@ export function ResearchDashboard() {
           {isLoading ? <p className="muted">Loading runs...</p> : null}
           {!isLoading && runs.length === 0 ? <p className="muted">No research runs yet.</p> : null}
           {runs.map((run) => (
-            <button
+            <div
+              aria-label={`Select research run ${run.user_query}`}
               className={`run-row ${run.id === selectedRun?.id ? "selected" : ""}`}
               key={run.id}
               onClick={() => setSelectedRunId(run.id)}
-              type="button"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedRunId(run.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
               <span>{run.user_query}</span>
-              <small>{run.status}</small>
-            </button>
+              <span className="run-row-footer">
+                <small>{run.status}</small>
+                <button className="danger-button inline" disabled={isDeleting} onClick={(event) => handleDeleteRun(event, run)} type="button">
+                  Delete
+                </button>
+              </span>
+            </div>
           ))}
         </div>
 

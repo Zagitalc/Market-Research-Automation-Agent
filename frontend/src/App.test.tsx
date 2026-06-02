@@ -14,6 +14,7 @@ describe("App", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("renders the dashboard shell", async () => {
@@ -121,5 +122,145 @@ describe("App", () => {
 
     expect(await screen.findByText("Buyer survey")).toBeInTheDocument();
     expect(screen.getByText("Buyers want faster insight workflows.")).toBeInTheDocument();
+  });
+
+  it("deletes a document after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const document = {
+      id: 2,
+      title: "Buyer survey",
+      source_type: "survey",
+      content: "Buyers want faster insight workflows.",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      chunks: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([document]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    expect(await screen.findByText("Buyer survey")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+
+    await waitFor(() => expect(screen.queryByText("Buyer survey")).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/documents/2/"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("does not delete a document when confirmation is cancelled", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const document = {
+      id: 2,
+      title: "Buyer survey",
+      source_type: "survey",
+      content: "Buyers want faster insight workflows.",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      chunks: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([document]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    expect(await screen.findByText("Buyer survey")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+
+    expect(screen.getByText("Buyer survey")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears all documents after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const document = {
+      id: 2,
+      title: "Buyer survey",
+      source_type: "survey",
+      content: "Buyers want faster insight workflows.",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      chunks: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify([document]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ deleted: 1, deleted_rows: 1, details: {} }), { status: 200 })),
+    );
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    expect(await screen.findByText("Buyer survey")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /clear all/i }));
+
+    expect(await screen.findByText(/no documents yet/i)).toBeInTheDocument();
+  });
+
+  it("deletes a selected research run and clears the detail panel", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const run = {
+      id: 1,
+      user_query: "Analyze AI research automation",
+      status: "completed",
+      final_answer: "Mock answer for AI research automation.",
+      confidence_score: 0.78,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      steps: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify([run]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 })),
+    );
+
+    render(<App />);
+    expect(await screen.findAllByText("Analyze AI research automation")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+
+    expect(await screen.findByText(/no research runs yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/select or create a run/i)).toBeInTheDocument();
+  });
+
+  it("clears research history after confirmation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const run = {
+      id: 1,
+      user_query: "Analyze AI research automation",
+      status: "completed",
+      final_answer: "Mock answer for AI research automation.",
+      confidence_score: 0.78,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      steps: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify([run]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ deleted: 1, deleted_rows: 1, details: {} }), { status: 200 })),
+    );
+
+    render(<App />);
+    expect(await screen.findAllByText("Analyze AI research automation")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: /clear history/i }));
+
+    expect(await screen.findByText(/no research runs yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/select or create a run/i)).toBeInTheDocument();
   });
 });

@@ -61,7 +61,13 @@ type CreateDocumentInput = {
   content: string;
 };
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export type ClearResponse = {
+  deleted: number;
+  deleted_rows: number;
+  details: Record<string, number>;
+};
+
+async function request<T = void>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -75,6 +81,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(message || `Request failed with status ${response.status}`);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 }
 
@@ -85,11 +95,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  deleteDocument: (id: number) =>
+    request(`/documents/${id}/`, {
+      method: "DELETE",
+    }),
+  clearDocuments: () =>
+    request<ClearResponse>("/documents/clear/", {
+      method: "DELETE",
+    }),
   getResearchRuns: () => request<ResearchRun[]>("/research-runs/"),
   createResearchRun: (userQuery: string) =>
     request<ResearchRun>("/research-runs/", {
       method: "POST",
       body: JSON.stringify({ user_query: userQuery }),
+    }),
+  deleteResearchRun: (id: number) =>
+    request(`/research-runs/${id}/`, {
+      method: "DELETE",
+    }),
+  clearResearchRuns: () =>
+    request<ClearResponse>("/research-runs/clear/", {
+      method: "DELETE",
     }),
   getResearchRunSteps: (id: number) => request<AgentStep[]>(`/research-runs/${id}/steps/`),
 };

@@ -9,6 +9,7 @@ export function DocumentsPage() {
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,37 @@ export function DocumentsPage() {
     }
   }
 
+  async function handleDeleteDocument(document: DocumentRecord) {
+    if (!window.confirm(`Delete "${document.title}" and its chunks?`)) return;
+
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await api.deleteDocument(document.id);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete document");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleClearDocuments() {
+    if (documents.length === 0) return;
+    if (!window.confirm("Delete all documents and their chunks?")) return;
+
+    setIsDeleting(true);
+    setError(null);
+    try {
+      await api.clearDocuments();
+      setDocuments([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear documents");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <section className="workspace-panel" aria-labelledby="documents-heading">
       <div className="panel-header">
@@ -61,7 +93,12 @@ export function DocumentsPage() {
           <h2 id="documents-heading">Documents</h2>
           <p>Add source material for the mock retrieval layer.</p>
         </div>
-        <span className="status-pill">{documents.length} docs</span>
+        <div className="detail-badges">
+          <button className="danger-button subtle" disabled={isDeleting || documents.length === 0} onClick={handleClearDocuments} type="button">
+            Clear all
+          </button>
+          <span className="status-pill">{documents.length} docs</span>
+        </div>
       </div>
 
       <form className="document-form" onSubmit={handleSubmit}>
@@ -92,8 +129,13 @@ export function DocumentsPage() {
         {documents.map((document) => (
           <article className="document-card" key={document.id}>
             <div>
-              <h3>{document.title}</h3>
-              <span>{document.source_type}</span>
+              <div>
+                <h3>{document.title}</h3>
+                <span>{document.source_type}</span>
+              </div>
+              <button className="danger-button" disabled={isDeleting} onClick={() => handleDeleteDocument(document)} type="button">
+                Delete
+              </button>
             </div>
             <p>{document.content}</p>
             <small>{document.chunks.length} chunk(s)</small>

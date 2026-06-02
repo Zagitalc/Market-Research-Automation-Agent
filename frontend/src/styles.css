@@ -170,6 +170,30 @@ button:disabled {
   color: #137a44;
 }
 
+.danger-button {
+  border: 1px solid #f3b5ad;
+  border-radius: 6px;
+  background: #fff7f6;
+  color: #b42318;
+  padding: 7px 10px;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fee4e2;
+}
+
+.danger-button.subtle {
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+.danger-button.inline {
+  padding: 4px 8px;
+  font-size: 0.76rem;
+}
+
 .query-form,
 .document-form {
   display: grid;
@@ -232,6 +256,7 @@ input:focus {
   color: #172033;
   padding: 14px;
   text-align: left;
+  cursor: pointer;
 }
 
 .run-row.selected {
@@ -250,6 +275,13 @@ input:focus {
   color: #667085;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.run-row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .run-detail {

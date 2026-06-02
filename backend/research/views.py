@@ -12,6 +12,7 @@ class ResearchRunViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     queryset = ResearchRun.objects.prefetch_related("steps").all()
@@ -26,3 +27,15 @@ class ResearchRunViewSet(
         research_run = self.get_object()
         serializer = AgentStepSerializer(research_run.steps.all(), many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["delete"])
+    def clear(self, request):
+        run_count = ResearchRun.objects.count()
+        deleted_count, deleted_details = ResearchRun.objects.all().delete()
+        return Response(
+            {
+                "deleted": run_count,
+                "deleted_rows": deleted_count,
+                "details": deleted_details,
+            }
+        )

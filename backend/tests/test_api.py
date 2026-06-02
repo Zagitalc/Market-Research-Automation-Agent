@@ -42,6 +42,37 @@ def test_document_create_list_and_detail(api_client):
 
 
 @pytest.mark.django_db
+def test_delete_document_removes_document_and_chunks(api_client):
+    document = Document.objects.create(title="Delete me", source_type="note", content="Old source")
+    DocumentChunk.objects.create(document=document, chunk_text="Old source", embedding=[1.0])
+
+    response = api_client.delete(f"/api/documents/{document.id}/")
+
+    assert response.status_code == 204
+    assert Document.objects.count() == 0
+    assert DocumentChunk.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_clear_documents_returns_counts_and_cascades_chunks(api_client):
+    first = Document.objects.create(title="First", source_type="note", content="First source")
+    second = Document.objects.create(title="Second", source_type="note", content="Second source")
+    DocumentChunk.objects.create(document=first, chunk_text="First source", embedding=[1.0])
+    DocumentChunk.objects.create(document=second, chunk_text="Second source", embedding=[1.0])
+
+    response = api_client.delete("/api/documents/clear/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted"] == 2
+    assert body["deleted_rows"] == 4
+    assert body["details"]["documents.Document"] == 2
+    assert body["details"]["documents.DocumentChunk"] == 2
+    assert Document.objects.count() == 0
+    assert DocumentChunk.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_research_run_creation_completes_mock_agent_flow(api_client):
     document = Document.objects.create(
         title="Market pulse",
@@ -88,3 +119,39 @@ def test_research_run_steps_endpoint(api_client):
 
     assert response.status_code == 200
     assert response.json()[0]["step_type"] == "plan"
+
+
+@pytest.mark.django_db
+def test_delete_research_run_removes_run_and_agent_steps(api_client):
+    run = ResearchRun.objects.create(user_query="Delete this run", status=ResearchRun.Status.COMPLETED)
+    AgentStep.objects.create(
+        research_run=run,
+        step_type=AgentStep.StepType.PLAN,
+        input_data={},
+        output_data={},
+    )
+
+    response = api_client.delete(f"/api/research-runs/{run.id}/")
+
+    assert response.status_code == 204
+    assert ResearchRun.objects.count() == 0
+    assert AgentStep.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_clear_research_runs_returns_counts_and_cascades_steps(api_client):
+    first = ResearchRun.objects.create(user_query="First", status=ResearchRun.Status.COMPLETED)
+    second = ResearchRun.objects.create(user_query="Second", status=ResearchRun.Status.COMPLETED)
+    AgentStep.objects.create(research_run=first, step_type=AgentStep.StepType.PLAN, input_data={}, output_data={})
+    AgentStep.objects.create(research_run=second, step_type=AgentStep.StepType.PLAN, input_data={}, output_data={})
+
+    response = api_client.delete("/api/research-runs/clear/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted"] == 2
+    assert body["deleted_rows"] == 4
+    assert body["details"]["research.ResearchRun"] == 2
+    assert body["details"]["agents.AgentStep"] == 2
+    assert ResearchRun.objects.count() == 0
+    assert AgentStep.objects.count() == 0
