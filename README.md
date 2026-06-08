@@ -7,6 +7,7 @@ The current app is RAG v1: documents are chunked, chunks receive embeddings, ret
 ## Why This Project Matters
 
 - **Agentic AI:** each research request creates a durable trace of agent steps, making orchestration visible and auditable.
+- **LangGraph orchestration:** the research workflow runs through a typed graph with explicit planning, retrieval, tool, reflection, retry, and final-answer nodes.
 - **RAG foundations:** documents are split into chunks, embeddings are stored, and retrieved evidence is shown in the UI.
 - **Django and SQL:** the backend uses Django models, migrations, DRF serializers, viewsets, and PostgreSQL.
 - **React:** the frontend provides a dashboard for query submission, run inspection, agent timelines, and source document management.
@@ -20,7 +21,7 @@ backend/
   accounts/               Placeholder app for future auth
   documents/              Document and chunk models, API, retrieval service
   research/               ResearchRun model and API
-  agents/                 AgentStep model and mock agent runner
+  agents/                 AgentStep model and LangGraph research workflow
 frontend/
   src/                    React TypeScript app
 docker-compose.yml
@@ -130,19 +131,22 @@ npm run dev
 
 Clear-all responses include `deleted` for top-level records, `deleted_rows` for all database rows including cascades, and `details` for Django's per-model delete breakdown.
 
-## Agent Flow
+## LangGraph Agent Flow
 
-`POST /api/research-runs/` performs a synchronous RAG v1 workflow:
+`POST /api/research-runs/` performs a synchronous RAG v1 workflow through LangGraph while keeping the Django API response shape stable:
 
 1. Create a `ResearchRun` with status `running`.
-2. Generate a deterministic plan step.
-3. Retrieve relevant `DocumentChunk` records using embedding similarity or keyword fallback.
-4. Create a diagnostic tool call step.
-5. Reflect on whether enough evidence exists.
+2. Start a typed LangGraph state with the query, AI mode, retry count, retrieved chunks, reflection data, final answer fields, and errors.
+3. Run the graph nodes in order: `plan`, `retrieve`, `tool_call`, `reflect`, and `final`.
+4. After `reflect`, route conditionally:
+   - a top retrieval score of at least `0.5` is enough evidence and goes directly to `final`
+   - a score below `0.5` retries `retrieve` once with a refined query
+   - weak evidence after one retry goes to `final` with `0.35` confidence and an explicit insufficiency notice
+5. Save each node as an `AgentStep` record using the existing step types.
 6. Create a final answer with OpenAI when enabled, otherwise mock synthesis.
 7. Mark the run `completed`.
 
-The orchestration entry point lives in `backend/agents/services/agent_runner.py`. Retrieval lives in `backend/documents/services/retriever.py`.
+The orchestration entry point and graph definition live in `backend/agents/services/agent_runner.py`. Retrieval lives in `backend/documents/services/retriever.py`. Final answer synthesis remains in `backend/agents/services/llm_client.py`, so OpenAI failures still fall back to mock answers with diagnostic metadata saved in the final step.
 
 ## Manual Test Flow
 
@@ -170,6 +174,6 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 - Enable pgvector similarity search with indexed vector columns.
 - Add richer chunking and source citations.
 - Add authentication and per-user research runs.
-- Add LangGraph or another workflow engine when orchestration needs branching/streaming.
+- Add LangGraph checkpointing or streaming when the workflow needs resumable or live-running agent traces.
 - Add async execution with Celery, Django-Q, or a workflow runner.
 - Deploy to Render, Fly.io, or Azure.
