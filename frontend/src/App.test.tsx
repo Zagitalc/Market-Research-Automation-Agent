@@ -93,6 +93,32 @@ describe("App", () => {
     expect(screen.getByText("Automation platforms are moving toward agentic workflows.")).toBeInTheDocument();
   });
 
+  it("displays 35% confidence for a weak-evidence answer", async () => {
+    const run = {
+      id: 1,
+      user_query: "Analyze a weak market signal",
+      status: "completed",
+      final_answer: "Available evidence is insufficient to answer this question confidently.",
+      confidence_score: 0.35,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      steps: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response(JSON.stringify([run]), { status: 200 })),
+    );
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(
+        (_, element) => element?.tagName === "P" && element.textContent === "Confidence: 35%",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/available evidence is insufficient/i)).toBeInTheDocument();
+  });
+
   it("adds and lists documents", async () => {
     const document = {
       id: 2,

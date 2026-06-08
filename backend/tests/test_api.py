@@ -2,6 +2,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from agents.models import AgentStep
+from agents.services import agent_runner
 from documents.models import Document, DocumentChunk
 from research.models import ResearchRun
 
@@ -73,13 +74,28 @@ def test_clear_documents_returns_counts_and_cascades_chunks(api_client):
 
 
 @pytest.mark.django_db
-def test_research_run_creation_completes_mock_agent_flow(api_client):
+def test_research_run_creation_completes_mock_agent_flow(api_client, monkeypatch):
     document = Document.objects.create(
         title="Market pulse",
         source_type="note",
         content="Automation platforms are moving from dashboards to agentic workflows.",
     )
-    DocumentChunk.objects.create(document=document, chunk_text=document.content, embedding=[1.0, 0.0])
+    chunk = DocumentChunk.objects.create(document=document, chunk_text=document.content, embedding=[1.0, 0.0])
+    monkeypatch.setattr(
+        agent_runner,
+        "retrieve_relevant_chunks",
+        lambda query: [
+            {
+                "chunk_id": chunk.id,
+                "document_id": document.id,
+                "document_title": document.title,
+                "chunk_text": chunk.chunk_text,
+                "score": 0.9,
+                "retrieval_mode": "embedding",
+                "ai_mode": "mock",
+            }
+        ],
+    )
 
     response = api_client.post(
         "/api/research-runs/",
