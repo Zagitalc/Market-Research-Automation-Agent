@@ -115,7 +115,10 @@ def test_langgraph_weak_evidence_retries_retrieval_once(monkeypatch):
     assert final_step.output_data["retry_count"] == 1
     assert final_step.output_data["confidence_score"] == 0.35
     assert run.confidence_score == final_step.output_data["confidence_score"]
-    assert "uploaded sources [1] do not contain enough relevant evidence" in run.final_answer.lower()
+    assert "current document collection" in run.final_answer.lower()
+    assert "does not contain enough relevant evidence" in run.final_answer.lower()
+    assert "did not meet the evidence threshold: [1]" in run.final_answer.lower()
+    assert final_step.output_data["sources_used"][0]["citation_id"] == 1
 
 
 @pytest.mark.django_db
@@ -130,8 +133,10 @@ def test_no_evidence_answer_references_document_collection_without_echoing_query
     final_step = AgentStep.objects.get(step_type=AgentStep.StepType.FINAL)
     assert run.confidence_score == 0.35
     assert final_step.output_data["confidence_score"] == 0.35
-    assert "current document collection" in run.final_answer.lower()
-    assert "does not contain enough evidence" in run.final_answer.lower()
+    assert run.final_answer == (
+        "The current document collection does not contain enough evidence to answer "
+        "this question confidently."
+    )
     assert awkward_query.lower() not in run.final_answer.lower()
     assert "[1]" not in run.final_answer
     assert final_step.output_data["sources_used"] == []

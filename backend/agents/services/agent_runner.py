@@ -267,14 +267,12 @@ def _build_retry_query(user_query: str) -> str:
 
 def _compose_low_evidence_answer(chunks: list[dict[str, Any]]) -> str:
     if not chunks:
-        return (
-            "The current document collection does not contain enough evidence to answer "
-            "this question confidently. Upload relevant sources and try again."
-        )
+        return "The current document collection does not contain enough evidence to answer this question confidently."
     markers = _citation_markers(chunks)
     return (
-        f"The uploaded sources {markers} do not contain enough relevant evidence to answer this "
-        "question confidently. Add more directly related sources and try again."
+        "The current document collection does not contain enough relevant evidence to answer "
+        "this question confidently. The closest retrieved sources were reviewed but did not "
+        f"meet the evidence threshold: {markers}."
     )
 
 
