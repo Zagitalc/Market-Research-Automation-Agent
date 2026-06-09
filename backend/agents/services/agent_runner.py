@@ -102,7 +102,7 @@ def retrieve_node(state: ResearchAgentState) -> dict[str, Any]:
         retry_count += 1
 
     retrieval_query = state.get("retrieval_query") or state["user_query"]
-    chunks = retrieve_relevant_chunks(retrieval_query)
+    chunks = _assign_citation_ids(retrieve_relevant_chunks(retrieval_query))
     _create_step(
         state,
         AgentStep.StepType.RETRIEVE,
@@ -199,6 +199,9 @@ def final_node(state: ResearchAgentState) -> dict[str, Any]:
     confidence = STRONG_EVIDENCE_CONFIDENCE if enough_evidence else WEAK_EVIDENCE_CONFIDENCE
     if not enough_evidence:
         final_answer = _compose_low_evidence_answer(state["retrieved_chunks"])
+    elif state["retrieved_chunks"]:
+        final_answer = _ensure_citation_markers(final_answer, state["retrieved_chunks"])
+    sources_used = _build_sources_used(state["retrieved_chunks"])
     errors = list(state["errors"])
     if synthesis["error"]:
         errors.append(synthesis["error"])
@@ -219,6 +222,7 @@ def final_node(state: ResearchAgentState) -> dict[str, Any]:
             "model": synthesis["model"],
             "error": synthesis["error"],
             "evidence": state["retrieved_chunks"],
+            "sources_used": sources_used,
             "retry_count": state["retry_count"],
         },
     )
@@ -267,7 +271,49 @@ def _compose_low_evidence_answer(chunks: list[dict[str, Any]]) -> str:
             "The current document collection does not contain enough evidence to answer "
             "this question confidently. Upload relevant sources and try again."
         )
+    markers = _citation_markers(chunks)
     return (
-        "The uploaded sources do not contain enough relevant evidence to answer this "
+        f"The uploaded sources {markers} do not contain enough relevant evidence to answer this "
         "question confidently. Add more directly related sources and try again."
     )
+
+
+def _assign_citation_ids(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            **chunk,
+            "citation_id": index,
+        }
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+
+
+def _citation_markers(chunks: list[dict[str, Any]]) -> str:
+    return " ".join(f"[{chunk['citation_id']}]" for chunk in chunks)
+
+
+def _ensure_citation_markers(answer: str, chunks: list[dict[str, Any]]) -> str:
+    markers = _citation_markers(chunks)
+    if all(f"[{chunk['citation_id']}]" in answer for chunk in chunks):
+        return answer
+    return f"{answer.rstrip()} Sources: {markers}."
+
+
+def _build_sources_used(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "citation_id": chunk["citation_id"],
+            "document_title": chunk["document_title"],
+            "chunk_id": chunk["chunk_id"],
+            "score": chunk["score"],
+            "excerpt": _build_excerpt(chunk["chunk_text"]),
+        }
+        for chunk in chunks
+    ]
+
+
+def _build_excerpt(text: str, limit: int = 180) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3].rstrip()}..."

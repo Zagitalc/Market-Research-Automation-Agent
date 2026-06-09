@@ -203,10 +203,13 @@ function EvidenceList({ evidence }: { evidence: RetrievalEvidence[] }) {
     <div className="evidence-list" aria-label="Retrieved evidence">
       <h4>Retrieved evidence</h4>
       {evidence.length === 0 ? <p className="muted">No evidence retrieved yet.</p> : null}
-      {evidence.map((chunk) => (
+      {evidence.map((chunk, index) => (
         <article className="evidence-card" key={chunk.chunk_id}>
           <div className="evidence-card-header">
-            <strong>{chunk.document_title}</strong>
+            <div className="evidence-source">
+              <span className="citation-label">[{chunk.citation_id ?? index + 1}]</span>
+              <strong>{chunk.document_title}</strong>
+            </div>
             <span>{chunk.retrieval_mode} · {Math.round(chunk.score * 100)}%</span>
           </div>
           <p>{chunk.chunk_text}</p>
@@ -236,8 +239,16 @@ function AgentTimeline({ steps }: { steps: AgentStep[] }) {
 
 function getEvidence(run?: ResearchRun): RetrievalEvidence[] {
   if (!run) return [];
-  const retrieveStep = run.steps.find((step) => step.step_type === "retrieve");
-  return retrieveStep?.output_data.chunks ?? [];
+  const finalStep = run.steps.find((step) => step.step_type === "final");
+  if (finalStep?.output_data.evidence) return finalStep.output_data.evidence;
+
+  for (let index = run.steps.length - 1; index >= 0; index -= 1) {
+    const step = run.steps[index];
+    if (step.step_type === "retrieve" && step.output_data.chunks) {
+      return step.output_data.chunks;
+    }
+  }
+  return [];
 }
 
 function getAiMode(run?: ResearchRun): "mock" | "openai" {

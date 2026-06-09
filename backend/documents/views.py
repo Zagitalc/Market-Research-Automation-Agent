@@ -2,6 +2,7 @@ from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from config.throttles import ConfiguredScopedRateThrottle
 from documents.models import Document
 from documents.serializers import DocumentSerializer
 
@@ -15,6 +16,13 @@ class DocumentViewSet(
 ):
     queryset = Document.objects.prefetch_related("chunks").all()
     serializer_class = DocumentSerializer
+
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.action == "create":
+            self.throttle_scope = "document_create"
+            throttles.append(ConfiguredScopedRateThrottle())
+        return throttles
 
     @action(detail=False, methods=["delete"])
     def clear(self, request):

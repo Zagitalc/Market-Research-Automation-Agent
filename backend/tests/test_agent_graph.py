@@ -45,6 +45,17 @@ def test_langgraph_strong_evidence_goes_to_final(monkeypatch):
     assert run.confidence_score == 0.78
     assert run.confidence_score == final_step.output_data["confidence_score"]
     assert "Mock answer" in run.final_answer
+    assert "[1]" in run.final_answer
+    assert final_step.output_data["evidence"][0]["citation_id"] == 1
+    assert final_step.output_data["sources_used"] == [
+        {
+            "citation_id": 1,
+            "document_title": "Market pulse",
+            "chunk_id": 1,
+            "score": 0.91,
+            "excerpt": "Market research teams are adopting AI automation workflows.",
+        }
+    ]
     assert reflection.output_data["enough_evidence"] is True
     assert reflection.output_data["top_score"] == 0.91
     assert reflection.output_data["score_threshold"] == agent_runner.ENOUGH_EVIDENCE_SCORE_THRESHOLD
@@ -104,7 +115,7 @@ def test_langgraph_weak_evidence_retries_retrieval_once(monkeypatch):
     assert final_step.output_data["retry_count"] == 1
     assert final_step.output_data["confidence_score"] == 0.35
     assert run.confidence_score == final_step.output_data["confidence_score"]
-    assert "uploaded sources do not contain enough relevant evidence" in run.final_answer.lower()
+    assert "uploaded sources [1] do not contain enough relevant evidence" in run.final_answer.lower()
 
 
 @pytest.mark.django_db
@@ -122,6 +133,38 @@ def test_no_evidence_answer_references_document_collection_without_echoing_query
     assert "current document collection" in run.final_answer.lower()
     assert "does not contain enough evidence" in run.final_answer.lower()
     assert awkward_query.lower() not in run.final_answer.lower()
+    assert "[1]" not in run.final_answer
+    assert final_step.output_data["sources_used"] == []
+
+
+@pytest.mark.django_db
+def test_citation_ids_follow_retrieval_order(monkeypatch):
+    second_chunk = {
+        **_evidence_chunk(),
+        "chunk_id": 2,
+        "document_id": 2,
+        "document_title": "Buyer survey",
+        "chunk_text": "Enterprise buyers want faster automated research workflows.",
+        "score": 0.82,
+    }
+    monkeypatch.setattr(
+        agent_runner,
+        "retrieve_relevant_chunks",
+        lambda query: [_evidence_chunk(), second_chunk],
+    )
+    run = ResearchRun.objects.create(user_query="Analyze buyer adoption", status=ResearchRun.Status.RUNNING)
+
+    agent_runner.run_research_agent(run)
+
+    run.refresh_from_db()
+    retrieve_step = AgentStep.objects.get(step_type=AgentStep.StepType.RETRIEVE)
+    final_step = AgentStep.objects.get(step_type=AgentStep.StepType.FINAL)
+    assert [chunk["citation_id"] for chunk in retrieve_step.output_data["chunks"]] == [1, 2]
+    assert "[1]" in run.final_answer
+    assert "[2]" in run.final_answer
+    assert [source["citation_id"] for source in final_step.output_data["sources_used"]] == [1, 2]
+    assert final_step.output_data["sources_used"][1]["document_title"] == "Buyer survey"
+    assert final_step.output_data["sources_used"][1]["chunk_id"] == 2
 
 
 @pytest.mark.django_db

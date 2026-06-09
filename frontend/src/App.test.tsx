@@ -52,6 +52,7 @@ describe("App", () => {
             ai_mode: "mock",
             chunks: [
               {
+                citation_id: 1,
                 chunk_id: 10,
                 document_id: 7,
                 document_title: "Market pulse",
@@ -88,9 +89,37 @@ describe("App", () => {
     expect(await screen.findByText("Mock answer for AI research automation.")).toBeInTheDocument();
     expect(screen.getByText("Plan")).toBeInTheDocument();
     expect(screen.getByText("Mock mode")).toBeInTheDocument();
+    expect(screen.getByText("[1]")).toBeInTheDocument();
     expect(screen.getByText("Market pulse")).toBeInTheDocument();
     expect(screen.getByText("embedding · 82%")).toBeInTheDocument();
     expect(screen.getByText("Automation platforms are moving toward agentic workflows.")).toBeInTheDocument();
+  });
+
+  it("shows a friendly message when research creation is rate limited", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              detail: "Rate limit exceeded. Please wait before trying again.",
+              code: "rate_limited",
+              retry_after: 60,
+            }),
+            { status: 429, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/research query/i), "Analyze AI adoption");
+    await userEvent.click(screen.getByRole("button", { name: /run research/i }));
+
+    expect(
+      await screen.findByText("Too many requests. Try again in about 60 seconds."),
+    ).toBeInTheDocument();
   });
 
   it("displays 35% confidence for a weak-evidence answer", async () => {

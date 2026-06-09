@@ -58,6 +58,9 @@ README.md
 | `OPENAI_LLM_MODEL` | `gpt-4.1-mini` | Model used for final-answer synthesis in OpenAI mode. |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Model used for chunk/query embeddings in OpenAI mode. |
 | `VITE_API_BASE_URL` | `http://localhost:8000/api` | Frontend API base URL. |
+| `API_ANON_RATE` | `120/min` | General anonymous API request limit. |
+| `RESEARCH_RUN_CREATE_RATE` | `5/min` | Stricter limit for creating research runs. |
+| `DOCUMENT_CREATE_RATE` | `20/min` | Limit for document creation. |
 
 Mock mode behavior:
 
@@ -76,6 +79,12 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 If `AI_MOCK_MODE=false` but no key is present, the backend falls back to mock mode. If an OpenAI final-answer call fails, the app saves diagnostic metadata in the final agent step and falls back to a mock answer.
+
+## Deployment Safety
+
+DRF throttling protects normal API traffic and applies stricter limits to research-run and document creation. Rate-limited requests return HTTP `429` with a structured `rate_limited` response and retry timing where available.
+
+For public portfolio demos, deploy with `AI_MOCK_MODE=true` by default. This prevents anonymous visitors from consuming paid OpenAI requests. Enable OpenAI mode only in a controlled environment with tighter rate limits, secret management, and monitoring.
 
 ## Backend Development
 
@@ -143,10 +152,14 @@ Clear-all responses include `deleted` for top-level records, `deleted_rows` for 
    - a score below `0.5` retries `retrieve` once with a refined query
    - weak evidence after one retry goes to `final` with `0.35` confidence and an explicit insufficiency notice
 5. Save each node as an `AgentStep` record using the existing step types.
-6. Create a final answer with OpenAI when enabled, otherwise mock synthesis.
+6. Assign citation IDs to retrieved chunks and create a final answer with OpenAI when enabled, otherwise mock synthesis.
 7. Mark the run `completed`.
 
 The orchestration entry point and graph definition live in `backend/agents/services/agent_runner.py`. Retrieval lives in `backend/documents/services/retriever.py`. Final answer synthesis remains in `backend/agents/services/llm_client.py`, so OpenAI failures still fall back to mock answers with diagnostic metadata saved in the final step.
+
+### Citations
+
+Retrieved chunks receive sequential numeric `citation_id` values in relevance order. Final answers reference those sources with markers such as `[1]` and `[2]`, and evidence cards display the same labels. The final `AgentStep.output_data` includes `sources_used`, with each source's citation ID, document title, chunk ID, score, and excerpt. No-evidence answers return an empty `sources_used` list and do not display invented citations.
 
 ## Manual Test Flow
 
@@ -157,6 +170,7 @@ The orchestration entry point and graph definition live in `backend/agents/servi
    - final answer
    - Mock mode or OpenAI mode badge
    - retrieved evidence
+   - matching citation markers in the answer and evidence cards
    - document title
    - retrieval score
    - full agent step timeline
@@ -172,7 +186,7 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 ## Next Steps
 
 - Enable pgvector similarity search with indexed vector columns.
-- Add richer chunking and source citations.
+- Add richer chunking and source metadata.
 - Add authentication and per-user research runs.
 - Add LangGraph checkpointing or streaming when the workflow needs resumable or live-running agent traces.
 - Add async execution with Celery, Django-Q, or a workflow runner.

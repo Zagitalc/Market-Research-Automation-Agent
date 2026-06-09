@@ -28,6 +28,7 @@ export type AgentStep = {
 };
 
 export type RetrievalEvidence = {
+  citation_id: number;
   chunk_id: number;
   document_id: number;
   document_title: string;
@@ -37,10 +38,19 @@ export type RetrievalEvidence = {
   ai_mode?: "mock" | "openai";
 };
 
+export type CitationSource = {
+  citation_id: number;
+  document_title: string;
+  chunk_id: number;
+  score: number;
+  excerpt: string;
+};
+
 export type AgentStepData = Record<string, unknown> & {
   ai_mode?: "mock" | "openai";
   chunks?: RetrievalEvidence[];
   evidence?: RetrievalEvidence[];
+  sources_used?: CitationSource[];
   final_answer?: string;
 };
 
@@ -77,8 +87,19 @@ async function request<T = void>(path: string, options?: RequestInit): Promise<T
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed with status ${response.status}`);
+    const body = await parseErrorResponse(response);
+    if (response.status === 429) {
+      const retryMessage =
+        typeof body.retry_after === "number"
+          ? ` Try again in about ${Math.ceil(body.retry_after)} seconds.`
+          : " Please wait before trying again.";
+      throw new Error(`Too many requests.${retryMessage}`);
+    }
+    throw new Error(
+      typeof body.detail === "string"
+        ? body.detail
+        : `Request failed with status ${response.status}`,
+    );
   }
 
   if (response.status === 204) {
@@ -86,6 +107,14 @@ async function request<T = void>(path: string, options?: RequestInit): Promise<T
   }
 
   return response.json() as Promise<T>;
+}
+
+async function parseErrorResponse(response: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await response.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 export const api = {

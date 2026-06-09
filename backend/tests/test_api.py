@@ -1,10 +1,28 @@
 import pytest
+from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from agents.models import AgentStep
 from agents.services import agent_runner
 from documents.models import Document, DocumentChunk
 from research.models import ResearchRun
+
+
+THROTTLED_API_SETTINGS = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "1000/min",
+        "research_run_create": "1/min",
+        "document_create": "1/min",
+    },
+    "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
+}
 
 
 @pytest.fixture
@@ -119,6 +137,62 @@ def test_research_run_creation_completes_mock_agent_flow(api_client, monkeypatch
     final_step = AgentStep.objects.get(step_type=AgentStep.StepType.FINAL)
     assert final_step.output_data["ai_mode"] == "mock"
     assert final_step.output_data["evidence"]
+
+
+@pytest.mark.django_db
+@override_settings(REST_FRAMEWORK=THROTTLED_API_SETTINGS)
+def test_research_run_creation_is_throttled_with_clear_429(api_client, monkeypatch):
+    cache.clear()
+    agent_calls = []
+
+    def complete_research_run(research_run):
+        agent_calls.append(research_run.id)
+        research_run.status = ResearchRun.Status.COMPLETED
+        research_run.final_answer = "Test answer"
+        research_run.confidence_score = 0.78
+        research_run.save()
+        return research_run
+
+    monkeypatch.setattr("research.views.run_research_agent", complete_research_run)
+
+    first_response = api_client.post(
+        "/api/research-runs/",
+        {"user_query": "First request"},
+        format="json",
+    )
+    throttled_response = api_client.post(
+        "/api/research-runs/",
+        {"user_query": "Second request"},
+        format="json",
+    )
+
+    assert first_response.status_code == 201
+    assert throttled_response.status_code == 429
+    assert throttled_response.json()["code"] == "rate_limited"
+    assert "Rate limit exceeded" in throttled_response.json()["detail"]
+    assert throttled_response.json()["retry_after"] > 0
+    assert len(agent_calls) == 1
+
+
+@pytest.mark.django_db
+@override_settings(REST_FRAMEWORK=THROTTLED_API_SETTINGS)
+def test_document_creation_is_throttled(api_client):
+    cache.clear()
+    first_response = api_client.post(
+        "/api/documents/",
+        {"title": "First", "source_type": "note", "content": "First document"},
+        format="json",
+    )
+    throttled_response = api_client.post(
+        "/api/documents/",
+        {"title": "Second", "source_type": "note", "content": "Second document"},
+        format="json",
+    )
+
+    assert first_response.status_code == 201
+    assert throttled_response.status_code == 429
+    assert throttled_response.json()["code"] == "rate_limited"
+    assert Document.objects.count() == 1
 
 
 @pytest.mark.django_db
