@@ -91,6 +91,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("API_ANON_RATE", "120/min"),
+        "research_run_create": os.getenv("RESEARCH_RUN_CREATE_RATE", "5/min"),
+        "document_create": os.getenv("DOCUMENT_CREATE_RATE", "20/min"),
+    },
+    "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
 }
 
 CORS_ALLOWED_ORIGINS = [

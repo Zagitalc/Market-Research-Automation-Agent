@@ -4,6 +4,7 @@ from rest_framework.response import Response
 
 from agents.serializers import AgentStepSerializer
 from agents.services.agent_runner import run_research_agent
+from config.throttles import ConfiguredScopedRateThrottle
 from research.models import ResearchRun
 from research.serializers import ResearchRunSerializer
 
@@ -17,6 +18,13 @@ class ResearchRunViewSet(
 ):
     queryset = ResearchRun.objects.prefetch_related("steps").all()
     serializer_class = ResearchRunSerializer
+
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.action == "create":
+            self.throttle_scope = "research_run_create"
+            throttles.append(ConfiguredScopedRateThrottle())
+        return throttles
 
     def perform_create(self, serializer):
         research_run = serializer.save(status=ResearchRun.Status.RUNNING)
