@@ -179,6 +179,83 @@ describe("App", () => {
     expect(screen.getByText("Buyers want faster insight workflows.")).toBeInTheDocument();
   });
 
+  it("uploads a document and displays ingestion metadata", async () => {
+    const uploadedDocument = {
+      id: 3,
+      title: "ai-tools",
+      source_type: "upload",
+      content: "AI research tools are used by customer insight teams.",
+      original_filename: "ai-tools.txt",
+      file_type: "txt",
+      file_size: 58,
+      ingestion_status: "completed",
+      ingestion_error: "",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      chunks: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(uploadedDocument), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    await userEvent.click(screen.getByRole("button", { name: /upload file/i }));
+
+    const fileInput = screen.getByLabelText(/document file/i);
+    expect(fileInput).toHaveAttribute("accept", ".txt,.md,.pdf");
+    await userEvent.upload(
+      fileInput,
+      new File(["AI research tools are used by customer insight teams."], "ai-tools.txt", {
+        type: "text/plain",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /upload document/i }));
+
+    expect(await screen.findByText("ai-tools")).toBeInTheDocument();
+    expect(screen.getByText("ai-tools.txt")).toBeInTheDocument();
+    expect(screen.getByText("TXT")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
+
+    const requestOptions = fetchMock.mock.calls[2][1] as RequestInit;
+    expect(requestOptions.body).toBeInstanceOf(FormData);
+    expect((requestOptions.body as FormData).get("file")).toBeInstanceOf(File);
+    expect((requestOptions.headers as Headers).has("Content-Type")).toBe(false);
+  });
+
+  it("shows upload field validation errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ file: ["Unsupported file type. Upload a .txt, .md, or .pdf file."] }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+    );
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    await userEvent.click(screen.getByRole("button", { name: /upload file/i }));
+    await userEvent.upload(
+      screen.getByLabelText(/document file/i),
+      new File(["market,data"], "market.csv", { type: "text/csv" }),
+      { applyAccept: false },
+    );
+    await userEvent.click(screen.getByRole("button", { name: /upload document/i }));
+
+    expect(
+      await screen.findByText("File: Unsupported file type. Upload a .txt, .md, or .pdf file."),
+    ).toBeInTheDocument();
+  });
+
   it("deletes a document after confirmation", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const document = {

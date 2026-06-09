@@ -22,7 +22,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "accounts",
-    "documents",
+    "documents.apps.DocumentsConfig",
     "research",
     "agents",
 ]
@@ -85,7 +85,10 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+DOCUMENT_UPLOAD_MAX_BYTES = int(os.getenv("DOCUMENT_UPLOAD_MAX_BYTES", str(5 * 1024 * 1024)))
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [

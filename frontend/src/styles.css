@@ -201,6 +201,73 @@ button:disabled {
   margin: 24px 0;
 }
 
+.input-mode-control {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 24px;
+  padding: 4px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f6f8fb;
+}
+
+.input-mode-control button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #42526e;
+  padding: 7px 12px;
+  font-weight: 700;
+}
+
+.input-mode-control button.active {
+  background: #263a5f;
+  color: #ffffff;
+}
+
+.upload-form {
+  margin-top: 12px;
+}
+
+.selected-file,
+.upload-help {
+  margin: 0;
+}
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+  background: #f6f8fb;
+  padding: 10px 12px;
+  color: #42526e;
+}
+
+.document-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: #667085;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.document-metadata span {
+  border-radius: 999px;
+  background: #edf2f7;
+  padding: 4px 8px;
+}
+
+.document-metadata .ingestion-status {
+  background: #e7f8ef;
+  color: #137a44;
+}
+
 .query-form label,
 .document-form label {
   display: grid;
