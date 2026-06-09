@@ -2,7 +2,7 @@
 
 A working AI engineering portfolio demo for automated market research. The application combines a Django REST Framework backend, a React + TypeScript dashboard, PostgreSQL persistence, and LangGraph orchestration in an inspectable end-to-end research workflow.
 
-Documents are chunked and embedded for RAG retrieval, with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, cascade deletion, and deployment-oriented API rate limiting.
+Documents can be pasted or uploaded as TXT, Markdown, and text-based PDF files, then are chunked and embedded for RAG retrieval with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, retained-source cleanup, cascade deletion, and deployment-oriented API rate limiting.
 
 ![Market Research Automation Agent dashboard overview](docs/screenshots/01-dashboard-overview.png)
 
@@ -10,11 +10,12 @@ Documents are chunked and embedded for RAG retrieval, with keyword fallback when
 
 - **LangGraph research workflow:** typed `plan`, `retrieve`, `tool_call`, `reflect`, and `final` nodes with conditional weak-evidence retry.
 - **RAG document pipeline:** automatic chunking, deterministic or OpenAI embeddings, cosine-similarity ranking, and keyword fallback.
+- **File ingestion:** synchronous TXT, Markdown, and text-based PDF extraction with retained originals, configurable size limits, and collision-safe storage.
 - **Evidence quality controls:** a retrieval-score threshold, one refined-query retry, and distinct strong- and weak-evidence confidence scores.
 - **Structured citations:** final answers use `[1]`, `[2]`, and `[3]` markers linked to ranked evidence cards and persisted source metadata.
 - **Optional OpenAI integration:** OpenAI embeddings and answer synthesis when configured, with safe mock fallback if credentials or provider calls are unavailable.
 - **Auditable research history:** every run, graph step, input, output, answer, confidence score, and diagnostic error is persisted.
-- **Knowledge-base management:** create, inspect, delete, and clear documents with cascading chunk cleanup.
+- **Knowledge-base management:** paste or upload sources, inspect ingestion metadata, and delete or clear documents with cascading chunk and source-file cleanup.
 - **Deployment safeguards:** scoped DRF throttling for expensive creation endpoints and friendly HTTP 429 handling in React.
 - **Full-stack test coverage:** pytest for Django APIs and services, plus Vitest for dashboard workflows and error states.
 
@@ -109,7 +110,7 @@ DRF throttling protects expensive creation endpoints, while the React error bann
 backend/
   config/                 Django project settings and URLs
   accounts/               Placeholder app for future auth
-  documents/              Document and chunk models, API, retrieval service
+  documents/              Document ingestion, chunking, retrieval, models, and API
   research/               ResearchRun model and API
   agents/                 AgentStep model and LangGraph research workflow
 frontend/
@@ -151,6 +152,7 @@ README.md
 | `API_ANON_RATE` | `120/min` | General anonymous API request limit. |
 | `RESEARCH_RUN_CREATE_RATE` | `5/min` | Stricter limit for creating research runs. |
 | `DOCUMENT_CREATE_RATE` | `20/min` | Limit for document creation. |
+| `DOCUMENT_UPLOAD_MAX_BYTES` | `5242880` | Maximum uploaded document size in bytes (5 MB by default). |
 
 Mock mode:
 
@@ -169,6 +171,19 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 If `AI_MOCK_MODE=false` but no key is present, the backend falls back to mock mode. If an OpenAI final-answer call fails, the app saves diagnostic metadata in the final agent step and falls back to a mock answer.
+
+## File Ingestion
+
+The Documents workspace supports two input paths:
+
+- **Paste text:** manually enter a title, source type, and document content.
+- **Upload file:** upload a UTF-8 `.txt`, UTF-8 `.md`, or text-based `.pdf` file.
+
+The upload title is optional. A non-empty supplied title is used after trimming whitespace; otherwise the filename stem becomes the title. For example, `uk-ev-market-brief.pdf` becomes `uk-ev-market-brief`.
+
+Uploads are processed synchronously. The backend validates the extension and configured size limit, extracts text, retains the original through collision-safe Django storage, and reuses the existing chunking and embedding pipeline. Uploaded originals are removed when their document is deleted or the knowledge base is cleared. The API exposes filename, type, size, and ingestion status metadata, but does not expose a source-file download URL.
+
+PDF ingestion supports files that already contain extractable text. Scanned PDFs require OCR and are intentionally rejected in v1. Encrypted, malformed, empty, unsupported, oversized, or non-UTF-8 text files return validation errors without creating a document.
 
 ## Deployment Safety
 
@@ -218,6 +233,7 @@ npm run dev
 | GET | `/api/health/` | Service health check |
 | GET | `/api/documents/` | List documents |
 | POST | `/api/documents/` | Create a document, chunks, and chunk embeddings |
+| POST | `/api/documents/upload/` | Upload a TXT, Markdown, or text-based PDF document using multipart form data |
 | GET | `/api/documents/<id>/` | Retrieve one document |
 | DELETE | `/api/documents/<id>/` | Delete one document and cascade-delete its chunks |
 | DELETE | `/api/documents/clear/` | Delete all documents and chunks |
@@ -254,12 +270,12 @@ Retrieved chunks receive sequential numeric `citation_id` values in relevance or
 ## Manual Demo Script
 
 1. Start the Docker stack and open <http://localhost:5173>.
-2. Open **Documents** and add two or more market reports with distinct topics. Point out the automatic chunk count and persisted knowledge-base cards.
-3. Open **Research** and submit a question directly covered by one report. Show the completed run, AI-mode badge, 78% confidence, cited answer, ranked evidence cards, and matching `[n]` labels.
+2. Open **Documents**, switch to **Upload file**, and upload `ai-tools.txt`, `ev-market.md`, and `food-trends.txt`. Point out the filename, file type, completed status, automatic chunk count, and persisted knowledge-base cards.
+3. Open **Research** and ask which teams are adopting AI research tools fastest, what drives UK EV adoption, and what trends are appearing in UK restaurants. Show that each answer retrieves evidence from the corresponding uploaded source.
 4. Scroll through the agent timeline to demonstrate the saved plan, retrieval, tool call, reflection threshold, and final payload.
 5. Submit an unrelated question. Show the second retrieval attempt, explicit insufficiency wording, and 35% confidence.
 6. Submit research requests repeatedly to demonstrate the friendly rate-limit banner after the configured threshold.
-7. Delete one document and one research run, then use **Clear all** and **Clear history** to demonstrate confirmed cascade cleanup and empty states.
+7. Delete one uploaded document and confirm its retained source file is removed. Then use **Clear all** and **Clear history** to demonstrate confirmed file, chunk, and agent-step cleanup.
 
 ## pgvector Readiness
 
@@ -268,7 +284,8 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 ## Roadmap
 
 - Enable pgvector similarity search with indexed vector columns.
-- Add richer chunking and source metadata.
+- Add richer structure-aware chunking.
+- Add OCR, URL ingestion, and asynchronous ingestion jobs.
 - Add authentication and per-user research runs.
 - Add LangGraph checkpointing or streaming when the workflow needs resumable or live-running agent traces.
 - Add async execution with Celery, Django-Q, or a workflow runner.
@@ -277,5 +294,5 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 ## CV-Ready Project Bullets
 
 - Built a full-stack market research automation platform using Django REST Framework, React, TypeScript, PostgreSQL, Docker Compose, and LangGraph.
-- Implemented a RAG pipeline with automatic chunking, deterministic/OpenAI embeddings, cosine-similarity retrieval, keyword fallback, evidence thresholds, retry routing, confidence scoring, and structured citations.
+- Implemented TXT, Markdown, and text-based PDF ingestion with collision-safe retained storage, automatic chunking, deterministic/OpenAI embeddings, cosine-similarity retrieval, keyword fallback, evidence thresholds, retry routing, confidence scoring, and structured citations.
 - Added optional OpenAI synthesis with mock-first fallback, persisted agent observability, cascade-safe data management, scoped API throttling, and automated pytest/Vitest coverage.

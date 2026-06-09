@@ -13,6 +13,11 @@ export type DocumentRecord = {
   title: string;
   source_type: string;
   content: string;
+  original_filename: string;
+  file_type: string;
+  file_size: number | null;
+  ingestion_status: "completed";
+  ingestion_error: string;
   created_at: string;
   updated_at: string;
   chunks: DocumentChunk[];
@@ -78,12 +83,14 @@ export type ClearResponse = {
 };
 
 async function request<T = void>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers);
+  if (typeof options?.body === "string" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
     ...options,
+    headers,
   });
 
   if (!response.ok) {
@@ -95,11 +102,7 @@ async function request<T = void>(path: string, options?: RequestInit): Promise<T
           : " Please wait before trying again.";
       throw new Error(`Too many requests.${retryMessage}`);
     }
-    throw new Error(
-      typeof body.detail === "string"
-        ? body.detail
-        : `Request failed with status ${response.status}`,
-    );
+    throw new Error(getErrorMessage(body, response.status));
   }
 
   if (response.status === 204) {
@@ -107,6 +110,20 @@ async function request<T = void>(path: string, options?: RequestInit): Promise<T
   }
 
   return response.json() as Promise<T>;
+}
+
+function getErrorMessage(body: Record<string, unknown>, status: number): string {
+  if (typeof body.detail === "string") return body.detail;
+
+  for (const [field, value] of Object.entries(body)) {
+    const message = Array.isArray(value) ? value[0] : value;
+    if (typeof message === "string") {
+      const label = field.replace(/_/g, " ");
+      return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${message}`;
+    }
+  }
+
+  return `Request failed with status ${status}`;
 }
 
 async function parseErrorResponse(response: Response): Promise<Record<string, unknown>> {
@@ -124,6 +141,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  uploadDocument: (file: File, title: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (title.trim()) formData.append("title", title.trim());
+    return request<DocumentRecord>("/documents/upload/", {
+      method: "POST",
+      body: formData,
+    });
+  },
   deleteDocument: (id: number) =>
     request(`/documents/${id}/`, {
       method: "DELETE",

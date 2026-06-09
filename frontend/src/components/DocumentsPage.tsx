@@ -2,11 +2,17 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { DocumentRecord, api } from "../api/client";
 
+type DocumentInputMode = "paste" | "upload";
+
 export function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [inputMode, setInputMode] = useState<DocumentInputMode>("paste");
   const [title, setTitle] = useState("");
   const [sourceType, setSourceType] = useState("report");
   const [content, setContent] = useState("");
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -55,6 +61,25 @@ export function DocumentsPage() {
     }
   }
 
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!uploadFile) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const document = await api.uploadDocument(uploadFile, uploadTitle);
+      setDocuments((current) => [document, ...current]);
+      setUploadTitle("");
+      setUploadFile(null);
+      setFileInputKey((current) => current + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload document");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleDeleteDocument(document: DocumentRecord) {
     if (!window.confirm(`Delete "${document.title}" and its chunks?`)) return;
 
@@ -91,7 +116,7 @@ export function DocumentsPage() {
       <div className="panel-header">
         <div>
           <h2 id="documents-heading">Documents</h2>
-          <p>Add source material for the mock retrieval layer.</p>
+          <p>Add source material for embedding-based retrieval and research.</p>
         </div>
         <div className="detail-badges">
           <button className="danger-button subtle" disabled={isDeleting || documents.length === 0} onClick={handleClearDocuments} type="button">
@@ -101,25 +126,75 @@ export function DocumentsPage() {
         </div>
       </div>
 
-      <form className="document-form" onSubmit={handleSubmit}>
-        <div className="form-row">
-          <label>
-            Title
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label>
-            Source type
-            <input value={sourceType} onChange={(event) => setSourceType(event.target.value)} />
-          </label>
-        </div>
-        <label>
-          Content
-          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} />
-        </label>
-        <button type="submit" disabled={isSubmitting || !title.trim() || !content.trim()}>
-          {isSubmitting ? "Adding..." : "Add document"}
+      <div className="input-mode-control" aria-label="Document input method">
+        <button
+          className={inputMode === "paste" ? "active" : ""}
+          onClick={() => setInputMode("paste")}
+          type="button"
+        >
+          Paste text
         </button>
-      </form>
+        <button
+          className={inputMode === "upload" ? "active" : ""}
+          onClick={() => setInputMode("upload")}
+          type="button"
+        >
+          Upload file
+        </button>
+      </div>
+
+      {inputMode === "paste" ? (
+        <form className="document-form" onSubmit={handleSubmit}>
+          <div className="form-row">
+            <label>
+              Title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} />
+            </label>
+            <label>
+              Source type
+              <input value={sourceType} onChange={(event) => setSourceType(event.target.value)} />
+            </label>
+          </div>
+          <label>
+            Content
+            <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} />
+          </label>
+          <button type="submit" disabled={isSubmitting || !title.trim() || !content.trim()}>
+            {isSubmitting ? "Adding..." : "Add document"}
+          </button>
+        </form>
+      ) : (
+        <form className="document-form upload-form" onSubmit={handleUpload}>
+          <label>
+            Title (optional)
+            <input
+              placeholder="Defaults to the filename"
+              value={uploadTitle}
+              onChange={(event) => setUploadTitle(event.target.value)}
+            />
+          </label>
+          <label>
+            Document file
+            <input
+              accept=".txt,.md,.pdf"
+              key={fileInputKey}
+              onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+          </label>
+          {uploadFile ? (
+            <p className="selected-file">
+              <strong>{uploadFile.name}</strong>
+              <span>{formatFileSize(uploadFile.size)}</span>
+            </p>
+          ) : (
+            <p className="muted upload-help">TXT, Markdown, or text-based PDF. Maximum 5 MB by default.</p>
+          )}
+          <button type="submit" disabled={isSubmitting || !uploadFile}>
+            {isSubmitting ? "Uploading..." : "Upload document"}
+          </button>
+        </form>
+      )}
 
       {error ? <div className="error-banner">{error}</div> : null}
       {isLoading ? <p className="muted">Loading documents...</p> : null}
@@ -137,6 +212,14 @@ export function DocumentsPage() {
                 Delete
               </button>
             </div>
+            {document.original_filename ? (
+              <div className="document-metadata">
+                <span>{document.original_filename}</span>
+                <span>{document.file_type.toUpperCase()}</span>
+                <span className="ingestion-status">{document.ingestion_status}</span>
+                {document.file_size !== null ? <span>{formatFileSize(document.file_size)}</span> : null}
+              </div>
+            ) : null}
             <p>{document.content}</p>
             <small>{document.chunks.length} chunk(s)</small>
           </article>
@@ -144,4 +227,11 @@ export function DocumentsPage() {
       </div>
     </section>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) return `${kilobytes.toFixed(kilobytes >= 10 ? 0 : 1)} KB`;
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 }
