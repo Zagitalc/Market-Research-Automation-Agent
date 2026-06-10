@@ -226,6 +226,12 @@ Start Vite without Docker:
 npm run dev
 ```
 
+## Continuous Integration
+
+GitHub Actions runs independent backend and frontend checks for every pull request and for pushes to `main` or `v2`. The backend job uses Python 3.12, PostgreSQL 16 with pgvector available, mock AI mode, Django checks, migration drift detection, and pytest. The frontend job uses Node 20, installs the locked npm dependencies, runs Vitest in CI mode, and creates a production Vite build.
+
+CI never requires an OpenAI API key and does not make real OpenAI calls or upload generated media.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |

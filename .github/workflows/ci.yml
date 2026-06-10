@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - v2
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: market_research
+          POSTGRES_USER: market_research
+          POSTGRES_PASSWORD: market_research
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U market_research -d market_research"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DJANGO_SECRET_KEY: ci-secret-key
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      CORS_ALLOW_ALL_ORIGINS: "false"
+      POSTGRES_DB: market_research
+      POSTGRES_USER: market_research
+      POSTGRES_PASSWORD: market_research
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      AI_MOCK_MODE: "true"
+      OPENAI_API_KEY: ""
+      OPENAI_LLM_MODEL: gpt-4.1-mini
+      OPENAI_EMBEDDING_MODEL: text-embedding-3-small
+      DOCUMENT_UPLOAD_MAX_BYTES: "5242880"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Django system check
+        run: python manage.py check
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run backend tests
+        run: pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm run test:ci
+
+      - name: Build frontend
+        run: npm run build
