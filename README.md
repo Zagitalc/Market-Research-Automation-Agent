@@ -149,6 +149,14 @@ README.md
 | `OPENAI_LLM_MODEL` | `gpt-4.1-mini` | Model used for final-answer synthesis in OpenAI mode. |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Model used for chunk/query embeddings in OpenAI mode. |
 | `VITE_API_BASE_URL` | `http://localhost:8000/api` | Frontend API base URL. |
+| `DJANGO_SECRET_KEY` | development placeholder | Required strong secret when `DJANGO_DEBUG=false`. |
+| `DJANGO_DEBUG` | `true` | Set to `false` for every public deployment. |
+| `DJANGO_ALLOWED_HOSTS` | local hosts | Comma-separated backend hostnames without URL schemes. |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated frontend origins including `https://`. |
+| `CORS_ALLOW_ALL_ORIGINS` | `false` | Keep `false` for public deployments. |
+| `CSRF_TRUSTED_ORIGINS` | empty | Comma-separated trusted HTTPS origins for Django admin/session requests. |
+| `DJANGO_SECURE_SSL_REDIRECT` | `false` | Set to `true` after the hosted backend is serving HTTPS correctly. |
+| `DJANGO_SECURE_HSTS_SECONDS` | `0` | Enable HSTS only after HTTPS is verified; start with a short value such as `3600`. |
 | `API_ANON_RATE` | `120/min` | General anonymous API request limit. |
 | `RESEARCH_RUN_CREATE_RATE` | `5/min` | Stricter limit for creating research runs. |
 | `DOCUMENT_CREATE_RATE` | `20/min` | Limit for document creation. |
@@ -185,11 +193,79 @@ Uploads are processed synchronously. The backend validates the extension and con
 
 PDF ingestion supports files that already contain extractable text. Scanned PDFs require OCR and are intentionally rejected in v1. Encrypted, malformed, empty, unsupported, oversized, or non-UTF-8 text files return validation errors without creating a document.
 
-## Deployment Safety
+## Mock-Mode Public Deployment
 
 DRF throttling protects normal API traffic and applies stricter limits to research-run and document creation. Rate-limited requests return HTTP `429` with a structured `rate_limited` response and retry timing where available.
 
-For public portfolio demos, deploy with `AI_MOCK_MODE=true` by default. This prevents anonymous visitors from consuming paid OpenAI requests. Enable OpenAI mode only in a controlled environment with tighter rate limits, secret management, and monitoring.
+For a public portfolio demo, run the backend in deterministic mock mode. This keeps the RAG and LangGraph workflow functional without sending requests to OpenAI or exposing an API key.
+
+### Backend Service
+
+Provision PostgreSQL and configure these backend runtime variables:
+
+```env
+DJANGO_SECRET_KEY=generate-a-long-random-production-secret
+DJANGO_DEBUG=false
+DJANGO_ALLOWED_HOSTS=your-backend.example.com
+CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
+CORS_ALLOW_ALL_ORIGINS=false
+CSRF_TRUSTED_ORIGINS=https://your-frontend.example.com
+
+POSTGRES_DB=market_research
+POSTGRES_USER=market_research
+POSTGRES_PASSWORD=use-a-managed-secret
+POSTGRES_HOST=your-postgres-host
+POSTGRES_PORT=5432
+
+AI_MOCK_MODE=true
+OPENAI_API_KEY=
+
+API_ANON_RATE=120/min
+RESEARCH_RUN_CREATE_RATE=5/min
+DOCUMENT_CREATE_RATE=20/min
+DOCUMENT_UPLOAD_MAX_BYTES=5242880
+
+DJANGO_SECURE_SSL_REDIRECT=true
+DJANGO_SESSION_COOKIE_SECURE=true
+DJANGO_CSRF_COOKIE_SECURE=true
+DJANGO_SECURE_HSTS_SECONDS=3600
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false
+DJANGO_SECURE_HSTS_PRELOAD=false
+```
+
+`DJANGO_ALLOWED_HOSTS` contains hostnames only, for example `market-research-api.onrender.com`. `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` contain complete origins with the scheme, for example `https://market-research-demo.example.com`. Keep `CORS_ALLOW_ALL_ORIGINS=false`.
+
+Install dependencies, apply migrations, and start the production WSGI server:
+
+```bash
+python manage.py migrate
+gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000}
+```
+
+The backend Docker image uses this Gunicorn command by default. Docker Compose overrides it with Django's development server so the existing local workflow remains unchanged.
+
+### Frontend Service
+
+`VITE_API_BASE_URL` is a frontend build-time variable. Set it before running the Vite build, including the backend `/api` prefix:
+
+```env
+VITE_API_BASE_URL=https://your-backend.example.com/api
+```
+
+Then build and publish the generated `frontend/dist/` directory:
+
+```bash
+npm ci
+npm run build
+```
+
+Changing `VITE_API_BASE_URL` after the static bundle is built has no effect; rebuild the frontend when the backend URL changes. A trailing slash is accepted and normalized by the API client.
+
+### Uploaded Media Persistence
+
+Uploaded TXT, Markdown, and PDF originals are stored under Django's local `MEDIA_ROOT`. Many free or simple application hosts use ephemeral filesystems, so uploads can disappear after a restart, redeploy, or instance replacement even though PostgreSQL records remain. For a durable public demo, mount a persistent disk or configure object storage. Otherwise, treat uploads as temporary demo data and clear/re-upload documents after deployments.
+
+The public demo remains unauthenticated by design. Use conservative throttle limits and mock mode; do not enable paid OpenAI calls for anonymous traffic.
 
 ## Backend Development
 
