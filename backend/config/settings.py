@@ -1,5 +1,6 @@
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -16,6 +17,20 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 def env_list(name: str, default: str = "") -> list[str]:
     return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
+def build_database_config(env: Mapping[str, str] = os.environ) -> dict:
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env.get("POSTGRES_DB", "market_research"),
+        "USER": env.get("POSTGRES_USER", "market_research"),
+        "PASSWORD": env.get("POSTGRES_PASSWORD", "market_research"),
+        "HOST": env.get("POSTGRES_HOST", "localhost"),
+        "PORT": env.get("POSTGRES_PORT", "5432"),
+    }
+    if env.get("POSTGRES_SSL_REQUIRE", "false").strip().lower() in {"1", "true", "yes", "on"}:
+        config["OPTIONS"] = {"sslmode": "require"}
+    return {"default": config}
 
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
@@ -78,16 +93,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 if IS_PYTEST:
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
 else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("POSTGRES_DB", "market_research"),
-            "USER": os.getenv("POSTGRES_USER", "market_research"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "market_research"),
-            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
-            "PORT": os.getenv("POSTGRES_PORT", "5432"),
-        }
-    }
+    DATABASES = build_database_config()
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

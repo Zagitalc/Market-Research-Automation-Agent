@@ -157,6 +157,7 @@ README.md
 | `CSRF_TRUSTED_ORIGINS` | empty | Comma-separated trusted HTTPS origins for Django admin/session requests. |
 | `DJANGO_SECURE_SSL_REDIRECT` | `false` | Set to `true` after the hosted backend is serving HTTPS correctly. |
 | `DJANGO_SECURE_HSTS_SECONDS` | `0` | Enable HSTS only after HTTPS is verified; start with a short value such as `3600`. |
+| `POSTGRES_SSL_REQUIRE` | `false` | Set to `true` for Neon so PostgreSQL connections use `sslmode=require`. |
 | `API_ANON_RATE` | `120/min` | General anonymous API request limit. |
 | `RESEARCH_RUN_CREATE_RATE` | `5/min` | Stricter limit for creating research runs. |
 | `DOCUMENT_CREATE_RATE` | `20/min` | Limit for document creation. |
@@ -199,26 +200,82 @@ DRF throttling protects normal API traffic and applies stricter limits to resear
 
 For a public portfolio demo, run the backend in deterministic mock mode. This keeps the RAG and LangGraph workflow functional without sending requests to OpenAI or exposing an API key.
 
-### Backend Service
+### 1. Create the Neon Database
 
-Provision PostgreSQL and configure these backend runtime variables:
+Create a Neon project with these settings:
+
+- Project name: `market-research-agent`
+- PostgreSQL version: `18`
+- Region: AWS Europe West 2 (London)
+- Managed authentication: disabled
+
+Neon provides a connection string in this format:
+
+```text
+postgresql://username:password@host/database?sslmode=require
+```
+
+Copy its components into Render as separate variables:
 
 ```env
-DJANGO_SECRET_KEY=generate-a-long-random-production-secret
-DJANGO_DEBUG=false
-DJANGO_ALLOWED_HOSTS=your-backend.example.com
-CORS_ALLOWED_ORIGINS=https://your-frontend.example.com
-CORS_ALLOW_ALL_ORIGINS=false
-CSRF_TRUSTED_ORIGINS=https://your-frontend.example.com
-
-POSTGRES_DB=market_research
-POSTGRES_USER=market_research
-POSTGRES_PASSWORD=use-a-managed-secret
-POSTGRES_HOST=your-postgres-host
+POSTGRES_DB=<database-name>
+POSTGRES_USER=<username>
+POSTGRES_PASSWORD=<password>
+POSTGRES_HOST=<host-only>
 POSTGRES_PORT=5432
+POSTGRES_SSL_REQUIRE=true
+```
+
+Do not paste the password-bearing Neon connection string into GitHub, the README, issues, or chat. `POSTGRES_HOST` is the hostname only, without `https://`, the database path, or query parameters.
+
+### 2. Deploy the Render Backend
+
+Create a Render **Web Service** with:
+
+- Repository: `Market-Research-Automation-Agent`
+- Branch: `main`
+- Root directory: `backend`
+- Runtime: Python
+- Build command:
+
+```bash
+pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
+```
+
+- Start command:
+
+```bash
+gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+Generate the Django secret locally and paste it only into Render:
+
+```bash
+source backend/.venv/bin/activate
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+Configure these backend environment variables:
+
+```env
+DJANGO_SECRET_KEY=<generated-production-secret>
+DJANGO_DEBUG=false
+DJANGO_ALLOWED_HOSTS=<your-backend>.onrender.com
+CORS_ALLOWED_ORIGINS=https://temporary-placeholder.onrender.com
+CORS_ALLOW_ALL_ORIGINS=false
+CSRF_TRUSTED_ORIGINS=https://temporary-placeholder.onrender.com
+
+POSTGRES_DB=<from-neon>
+POSTGRES_USER=<from-neon>
+POSTGRES_PASSWORD=<from-neon>
+POSTGRES_HOST=<from-neon>
+POSTGRES_PORT=5432
+POSTGRES_SSL_REQUIRE=true
 
 AI_MOCK_MODE=true
 OPENAI_API_KEY=
+OPENAI_LLM_MODEL=gpt-4.1-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 
 API_ANON_RATE=120/min
 RESEARCH_RUN_CREATE_RATE=5/min
@@ -233,33 +290,52 @@ DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false
 DJANGO_SECURE_HSTS_PRELOAD=false
 ```
 
-`DJANGO_ALLOWED_HOSTS` contains hostnames only, for example `market-research-api.onrender.com`. `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` contain complete origins with the scheme, for example `https://market-research-demo.example.com`. Keep `CORS_ALLOW_ALL_ORIGINS=false`.
+`DJANGO_ALLOWED_HOSTS` contains hostnames only. CORS and CSRF values contain complete origins including `https://`. After deployment, verify:
 
-Install dependencies, apply migrations, and start the production WSGI server:
-
-```bash
-python manage.py migrate
-gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000}
+```text
+https://<your-backend>.onrender.com/api/health/
 ```
 
-The backend Docker image uses this Gunicorn command by default. Docker Compose overrides it with Django's development server so the existing local workflow remains unchanged.
+The expected response is HTTP `200` with `{"status":"ok"}`.
 
-### Frontend Service
+### 3. Deploy the Render Frontend
 
-`VITE_API_BASE_URL` is a frontend build-time variable. Set it before running the Vite build, including the backend `/api` prefix:
+Create a Render **Static Site** with:
+
+- Repository: `Market-Research-Automation-Agent`
+- Branch: `main`
+- Root directory: `frontend`
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
+
+Set this build-time environment variable:
 
 ```env
-VITE_API_BASE_URL=https://your-backend.example.com/api
+VITE_API_BASE_URL=https://<your-backend>.onrender.com/api
 ```
 
-Then build and publish the generated `frontend/dist/` directory:
+Never put secrets in a `VITE_*` variable because Vite includes them in the browser bundle. After the frontend deploys, update the backend values with its real origin and redeploy the backend:
 
-```bash
-npm ci
-npm run build
+```env
+CORS_ALLOWED_ORIGINS=https://<your-frontend>.onrender.com
+CSRF_TRUSTED_ORIGINS=https://<your-frontend>.onrender.com
 ```
 
-Changing `VITE_API_BASE_URL` after the static bundle is built has no effect; rebuild the frontend when the backend URL changes. A trailing slash is accepted and normalized by the API client.
+### 4. Verify the Live Demo
+
+1. Open the Render frontend URL.
+2. Upload a TXT file containing market-research evidence.
+3. Confirm its filename, file type, status, and chunks appear.
+4. Ask `Which teams are adopting AI research tools fastest?`.
+5. Confirm an evidence card and LangGraph timeline appear.
+6. Ask an unrelated question such as `How many holes do we have in Mars?`.
+7. Confirm the low-confidence evidence-insufficiency answer appears.
+
+Suggested TXT content:
+
+```text
+AI research tools are being adopted fastest by marketing, retail, customer insight, and sales enablement teams. These teams use AI to summarise feedback, compare competitor messaging, and produce faster insight reports.
+```
 
 ### Uploaded Media Persistence
 
