@@ -13,7 +13,7 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1>Market Research Automation Agent</h1>
-          <p>Agentic AI scaffold for research workflows, RAG, and analyst automation.</p>
+          <p>Evidence-backed market research with RAG, LangGraph, and analyst automation.</p>
         </div>
         <nav aria-label="Primary navigation">
           <button className={view === "research" ? "active" : ""} onClick={() => setView("research")} type="button">

@@ -111,7 +111,7 @@ export function ResearchDashboard() {
       <div className="panel-header">
         <div>
           <h2 id="research-heading">Research runs</h2>
-          <p>Submit a market question and inspect the mock agent trace.</p>
+          <p>Submit a market question and inspect the LangGraph agent timeline.</p>
         </div>
         <div className="detail-badges">
           <button className="danger-button subtle" disabled={isDeleting || runs.length === 0} onClick={handleClearRuns} type="button">

@@ -2,14 +2,30 @@
 
 A working AI engineering portfolio demo for automated market research. The application combines a Django REST Framework backend, a React + TypeScript dashboard, PostgreSQL persistence, and LangGraph orchestration in an inspectable end-to-end research workflow.
 
-Documents can be pasted or uploaded as TXT, Markdown, and text-based PDF files, then are chunked and embedded for RAG retrieval with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, retained-source cleanup, cascade deletion, and deployment-oriented API rate limiting.
+Documents can be pasted or uploaded as TXT, Markdown, and text-based PDF files, then are chunked for RAG retrieval. Mock mode uses deterministic lexical relevance, while OpenAI mode uses embedding similarity with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, retained-source cleanup, cascade deletion, and deployment-oriented API rate limiting.
+
+## Live Demo
+
+[Open the hosted Market Research Automation Agent](https://market-research-agent-frontend.onrender.com/)
+
+The public deployment runs in mock mode and does not require an OpenAI key. To try the complete workflow:
+
+1. Open **Documents**, select **Upload file**, and upload a UTF-8 TXT file containing the sample below.
+2. Confirm the filename, file type, ingestion status, and generated chunk appear.
+3. Open **Research** and ask `Which teams are adopting AI research tools fastest?`.
+4. Inspect the high-confidence answer, cited evidence card, retrieval score, and LangGraph timeline.
+5. Ask `How many holes do we have in Mars?` to see the weak-evidence retry and low-confidence response.
+
+```text
+AI research tools are being adopted fastest by marketing, retail, customer insight, and sales enablement teams. These teams use AI to summarise feedback, compare competitor messaging, and produce faster insight reports.
+```
 
 ![Market Research Automation Agent dashboard overview](docs/screenshots/01-dashboard-overview.png)
 
 ## Key Features
 
 - **LangGraph research workflow:** typed `plan`, `retrieve`, `tool_call`, `reflect`, and `final` nodes with conditional weak-evidence retry.
-- **RAG document pipeline:** automatic chunking, deterministic or OpenAI embeddings, cosine-similarity ranking, and keyword fallback.
+- **RAG document pipeline:** automatic chunking, deterministic lexical ranking in mock mode, and OpenAI embedding similarity with keyword fallback.
 - **File ingestion:** synchronous TXT, Markdown, and text-based PDF extraction with retained originals, configurable size limits, and collision-safe storage.
 - **Evidence quality controls:** a retrieval-score threshold, one refined-query retry, and distinct strong- and weak-evidence confidence scores.
 - **Structured citations:** final answers use `[1]`, `[2]`, and `[3]` markers linked to ranked evidence cards and persisted source metadata.
@@ -27,19 +43,19 @@ flowchart LR
     API --> GRAPH["LangGraph Research Workflow"]
     GRAPH --> RETRIEVER["RAG Retriever"]
     RETRIEVER --> DB["PostgreSQL: Documents, Chunks, Runs, Steps"]
-    RETRIEVER --> EMBEDDINGS["Mock or OpenAI Embeddings"]
+    RETRIEVER --> EMBEDDINGS["Mock Lexical Scoring or OpenAI Embeddings"]
     GRAPH --> LLM["Mock or OpenAI Answer Synthesis"]
     GRAPH --> DB
     API --> UI
 ```
 
-The React dashboard sends document and research requests to Django REST Framework. Django persists domain records in PostgreSQL and invokes the synchronous LangGraph workflow. Retrieval ranks stored document chunks using embeddings or keyword fallback; the graph reflects on evidence quality, optionally retries, synthesizes an answer, and saves the complete trace before returning it to the UI.
+The React dashboard sends document and research requests to Django REST Framework. Django persists domain records in PostgreSQL and invokes the synchronous LangGraph workflow. Retrieval ranks stored document chunks using mock lexical relevance or OpenAI embedding similarity with keyword fallback; the graph reflects on evidence quality, optionally retries, synthesizes an answer, and saves the complete trace before returning it to the UI.
 
 ## AI Modes
 
 | Mode | Configuration | Behavior |
 | --- | --- | --- |
-| Mock mode | `AI_MOCK_MODE=true` | Uses deterministic local embeddings and mock answer synthesis. No API key or network model call is required. |
+| Mock mode | `AI_MOCK_MODE=true` | Uses deterministic lexical retrieval and mock answer synthesis. No API key or network model call is required. |
 | OpenAI mode | `AI_MOCK_MODE=false` plus `OPENAI_API_KEY` | Uses the configured OpenAI embedding and language models while preserving the same RAG and LangGraph flow. |
 | Automatic fallback | Missing key or failed final-answer call | Runs locally without a key, or falls back to mock final synthesis and records diagnostic metadata when an OpenAI answer call fails. |
 
@@ -452,5 +468,5 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 ## CV-Ready Project Bullets
 
 - Built a full-stack market research automation platform using Django REST Framework, React, TypeScript, PostgreSQL, Docker Compose, and LangGraph.
-- Implemented TXT, Markdown, and text-based PDF ingestion with collision-safe retained storage, automatic chunking, deterministic/OpenAI embeddings, cosine-similarity retrieval, keyword fallback, evidence thresholds, retry routing, confidence scoring, and structured citations.
+- Implemented TXT, Markdown, and text-based PDF ingestion with collision-safe retained storage, automatic chunking, deterministic mock lexical retrieval, OpenAI embedding similarity, evidence thresholds, retry routing, confidence scoring, and structured citations.
 - Added optional OpenAI synthesis with mock-first fallback, persisted agent observability, cascade-safe data management, scoped API throttling, and automated pytest/Vitest coverage.

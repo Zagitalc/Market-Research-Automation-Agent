@@ -3,6 +3,7 @@ from django.test import override_settings
 
 from agents.models import AgentStep
 from agents.services import agent_runner
+from documents.models import Document, DocumentChunk
 from research.models import ResearchRun
 
 
@@ -184,6 +185,49 @@ def test_langgraph_mock_mode_works_without_openai_key(monkeypatch):
     assert final_step.output_data["ai_mode"] == "mock"
     assert final_step.output_data["model"] is None
     assert final_step.output_data["error"] is None
+
+
+@pytest.mark.django_db
+@override_settings(AI_MOCK_MODE=True, OPENAI_API_KEY="")
+def test_mock_mode_relevant_document_produces_strong_evidence_result():
+    text = (
+        "AI research tools are being adopted fastest by marketing, retail, customer insight, "
+        "and sales enablement teams."
+    )
+    document = Document.objects.create(title="AI research tools", source_type="upload", content=text)
+    DocumentChunk.objects.create(document=document, chunk_text=text, embedding=[-1.0, 0.0])
+    run = ResearchRun.objects.create(
+        user_query="Which teams are adopting AI research tools fastest?",
+        status=ResearchRun.Status.RUNNING,
+    )
+
+    agent_runner.run_research_agent(run)
+
+    run.refresh_from_db()
+    reflection = AgentStep.objects.get(step_type=AgentStep.StepType.REFLECT)
+    assert run.confidence_score == 0.78
+    assert reflection.output_data["enough_evidence"] is True
+    assert reflection.output_data["top_score"] >= agent_runner.ENOUGH_EVIDENCE_SCORE_THRESHOLD
+
+
+@pytest.mark.django_db
+@override_settings(AI_MOCK_MODE=True, OPENAI_API_KEY="")
+def test_mock_mode_unrelated_query_remains_low_confidence():
+    text = "AI research tools are adopted by marketing and customer insight teams."
+    document = Document.objects.create(title="AI research tools", source_type="upload", content=text)
+    DocumentChunk.objects.create(document=document, chunk_text=text, embedding=[1.0, 0.0])
+    run = ResearchRun.objects.create(
+        user_query="How many holes do we have in Mars?",
+        status=ResearchRun.Status.RUNNING,
+    )
+
+    agent_runner.run_research_agent(run)
+
+    run.refresh_from_db()
+    reflection_steps = AgentStep.objects.filter(step_type=AgentStep.StepType.REFLECT)
+    assert run.confidence_score == 0.35
+    assert all(step.output_data["enough_evidence"] is False for step in reflection_steps)
+    assert "current document collection" in run.final_answer.lower()
 
 
 @pytest.mark.django_db
