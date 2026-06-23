@@ -344,6 +344,23 @@ https://<your-backend>.onrender.com/api/health/
 ```
 
 The expected response is HTTP `200` with `{"status":"ok"}`.
+On Render, the response also includes deployment metadata from Render's default
+environment variables:
+
+```json
+{
+  "status": "ok",
+  "deployment": {
+    "commit": "<deployed-git-sha>",
+    "branch": "main",
+    "service_id": "<render-service-id>",
+    "service_name": "<render-service-name>"
+  }
+}
+```
+
+Compare `deployment.commit` with the latest GitHub commit on `main` when
+checking whether auto-deploy picked up a push.
 
 ### 3. Deploy the Render Frontend
 
@@ -435,7 +452,7 @@ CI never requires an OpenAI API key and does not make real OpenAI calls or uploa
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| GET | `/api/health/` | Service health check |
+| GET | `/api/health/` | Service health check with Render deployment metadata when available |
 | GET | `/api/documents/` | List documents |
 | POST | `/api/documents/` | Create a document, chunks, and chunk embeddings |
 | POST | `/api/documents/upload/` | Upload a TXT, Markdown, or text-based PDF document using multipart form data |

@@ -35,7 +35,32 @@ def test_health_endpoint(api_client):
     response = api_client.get("/api/health/")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "deployment": {
+            "commit": None,
+            "branch": None,
+            "service_id": None,
+            "service_name": None,
+        },
+    }
+
+
+def test_health_endpoint_includes_render_deployment_metadata(api_client, monkeypatch):
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123")
+    monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
+    monkeypatch.setenv("RENDER_SERVICE_ID", "srv-example")
+    monkeypatch.setenv("RENDER_SERVICE_NAME", "Market-Research-Automation-Agent")
+
+    response = api_client.get("/api/health/")
+
+    assert response.status_code == 200
+    assert response.json()["deployment"] == {
+        "commit": "abc123",
+        "branch": "main",
+        "service_id": "srv-example",
+        "service_name": "Market-Research-Automation-Agent",
+    }
 
 
 @pytest.mark.django_db
