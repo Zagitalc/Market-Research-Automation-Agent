@@ -210,6 +210,59 @@ def test_robots_network_failure_allows_target_fetch(api_client, monkeypatch):
     assert Document.objects.count() == 1
 
 
+def test_send_request_does_not_double_decode_compressed_response(monkeypatch):
+    body = b"<html><body><p>Readable compressed response body.</p></body></html>"
+
+    class FakeStreamResponse:
+        def __init__(self, url: str):
+            self.status_code = 200
+            self.headers = httpx.Headers(
+                {
+                    "content-type": "text/html",
+                    "content-encoding": "gzip",
+                    "content-length": "999",
+                    "transfer-encoding": "chunked",
+                }
+            )
+            self.request = httpx.Request("GET", url)
+            self.extensions = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def iter_bytes(self):
+            yield body
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def stream(self, method: str, url: str):
+            return FakeStreamResponse(url)
+
+    monkeypatch.setattr(direct.httpx, "Client", FakeClient)
+
+    fetched_response = direct.DirectWebFetchProvider()._send_request(
+        "https://example.com/",
+        max_bytes=1024,
+    )
+
+    assert fetched_response.content == body
+    assert fetched_response.headers["content-type"] == "text/html"
+    assert "content-encoding" not in fetched_response.headers
+    assert fetched_response.headers["content-length"] == str(len(body))
+    assert "transfer-encoding" not in fetched_response.headers
+
+
 @pytest.mark.django_db
 def test_duplicate_normalized_url_returns_conflict(api_client, monkeypatch):
     Document.objects.create(

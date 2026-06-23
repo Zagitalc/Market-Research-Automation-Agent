@@ -24,6 +24,7 @@ from documents.services.web_fetch.exceptions import (
 
 logger = logging.getLogger(__name__)
 SAFE_PORTS = {80, 443}
+DECODED_BODY_HEADERS = {"content-encoding", "content-length", "transfer-encoding"}
 
 
 class DirectWebFetchProvider:
@@ -166,7 +167,7 @@ class DirectWebFetchProvider:
                     chunks.append(chunk)
                 return httpx.Response(
                     status_code=response.status_code,
-                    headers=response.headers,
+                    headers=headers_for_decoded_body(response.headers),
                     content=b"".join(chunks),
                     request=response.request,
                     extensions=response.extensions,
@@ -257,6 +258,14 @@ def is_default_port(scheme: str, port: int) -> bool:
 
 def is_html_content_type(content_type: str) -> bool:
     return "text/html" in content_type.lower() or "application/xhtml+xml" in content_type.lower()
+
+
+def headers_for_decoded_body(headers: httpx.Headers) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in headers.items()
+        if key.lower() not in DECODED_BODY_HEADERS
+    }
 
 
 def normalize_hostname(hostname: str) -> str:
