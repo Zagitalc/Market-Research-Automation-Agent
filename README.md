@@ -362,6 +362,19 @@ environment variables:
 Compare `deployment.commit` with the latest GitHub commit on `main` when
 checking whether auto-deploy picked up a push.
 
+Render's native auto-deploy should be enough with this monorepo setup:
+
+- Backend service root directory: `backend`
+- Backend build filters: leave empty, or include `backend/**`
+- Auto-deploy: `On Commit`
+
+If Render's native GitHub webhook does not reliably create deploy events for
+pushes to `main`, add the backend service Deploy Hook URL as a GitHub Actions
+repository secret named `RENDER_BACKEND_DEPLOY_HOOK`. The CI workflow will then
+call the hook after backend checks pass on `main` when backend files change.
+Use the same fallback for the frontend with `RENDER_FRONTEND_DEPLOY_HOOK`.
+Keep deploy hook URLs secret.
+
 ### 3. Deploy the Render Frontend
 
 Create a Render **Static Site** with:
