@@ -1,13 +1,13 @@
 ---
 name: django-rag
-description: Use when modifying Django RAG, retrieval, embeddings, OpenAI/mock mode, document chunking, file ingestion, citations, LangGraph workflow, or research agent behavior in this repository.
+description: Use when modifying Django RAG, retrieval, embeddings, OpenAI/mock mode, document chunking, file ingestion, upcoming URL ingestion, citations, LangGraph workflow, or research agent behavior in this repository.
 ---
 
 # Django RAG Skill
 
 ## Purpose
 
-Use this skill when working on the Market Research Automation Agent backend, document ingestion, RAG retrieval, embeddings, citations, or LangGraph research workflow.
+Use this skill when working on the Market Research Automation Agent backend, document ingestion, upcoming controlled URL ingestion, RAG retrieval, embeddings, citations, or LangGraph research workflow.
 
 ## Rules
 
@@ -35,6 +35,10 @@ Use this skill when working on the Market Research Automation Agent backend, doc
 - `backend/documents/services/chunker.py`
 - `backend/documents/services/retriever.py`
 - `backend/documents/services/ingestion.py`
+- `backend/documents/services/web_fetch/base.py` when URL ingestion is implemented
+- `backend/documents/services/web_fetch/direct.py` when URL ingestion is implemented
+- `backend/documents/services/web_fetch/factory.py` when URL ingestion is implemented
+- `backend/documents/services/web_fetch/exceptions.py` when URL ingestion is implemented
 - `backend/documents/serializers.py`
 - `backend/documents/views.py`
 - `backend/documents/models.py`
@@ -79,6 +83,7 @@ The app currently includes:
 - Document creation/list/delete/clear
 - Research run creation/list/delete/clear
 - TXT, Markdown, and text-based PDF upload ingestion
+- controlled single-page public webpage ingestion is an approved upcoming milestone, not yet implemented
 - Retained original uploaded files in Django media storage
 - Automatic document chunking
 - JSONField-backed embeddings
@@ -122,6 +127,8 @@ The app supports document ingestion through:
 - uploaded `.md`
 - uploaded text-based `.pdf`
 
+The upcoming URL-ingestion milestone may add controlled ingestion for individual public webpages.
+
 When modifying ingestion:
 
 - Keep manual document creation working.
@@ -135,6 +142,16 @@ When modifying ingestion:
 - Ensure delete and clear-all remove retained source files.
 - Never commit generated media files.
 
+## URL-ingestion rules
+
+When URL ingestion is implemented, preserve these constraints:
+
+- Treat it as an additional ingestion path alongside pasted text and uploaded files, not a separate RAG pipeline.
+- Use the shared flow: validate destination -> check robots.txt -> fetch -> extract and clean text -> create `Document` -> chunk -> embed -> retrieve -> cite -> use in LangGraph.
+- Expected URL document metadata includes `source_kind`, `source_url`, `source_domain`, `fetched_at`, `fetch_provider`, `http_status`, and `content_type`.
+- Keep mock-first development, optional OpenAI mode, existing retriever contracts, citation behavior, confidence scoring, weak-evidence behavior, delete/clear controls, uploaded-file cleanup behavior, rate limiting, and existing API routes.
+- Do not add JavaScript rendering, browser automation, crawling, authenticated scraping, hosted scraping providers, anti-bot bypass, OCR, background jobs, or pgvector unless explicitly requested.
+
 ## Verification
 
 After backend changes, run where possible:
@@ -142,3 +159,4 @@ After backend changes, run where possible:
 ```bash
 cd backend && .venv/bin/python manage.py check
 cd backend && .venv/bin/pytest
+```
