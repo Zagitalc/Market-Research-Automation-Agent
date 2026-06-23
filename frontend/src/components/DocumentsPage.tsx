@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { DocumentRecord, api } from "../api/client";
 
-type DocumentInputMode = "paste" | "upload";
+type DocumentInputMode = "paste" | "upload" | "url";
 
 export function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -13,6 +13,8 @@ export function DocumentsPage() {
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [urlTitle, setUrlTitle] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -80,6 +82,27 @@ export function DocumentsPage() {
     }
   }
 
+  async function handleUrlImport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!sourceUrl.trim()) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const document = await api.importUrl({
+        url: sourceUrl,
+        title: urlTitle,
+      });
+      setDocuments((current) => [document, ...current]);
+      setSourceUrl("");
+      setUrlTitle("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import URL");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleDeleteDocument(document: DocumentRecord) {
     if (!window.confirm(`Delete "${document.title}" and its chunks?`)) return;
 
@@ -141,6 +164,13 @@ export function DocumentsPage() {
         >
           Upload file
         </button>
+        <button
+          className={inputMode === "url" ? "active" : ""}
+          onClick={() => setInputMode("url")}
+          type="button"
+        >
+          Import URL
+        </button>
       </div>
 
       {inputMode === "paste" ? (
@@ -163,7 +193,9 @@ export function DocumentsPage() {
             {isSubmitting ? "Adding..." : "Add document"}
           </button>
         </form>
-      ) : (
+      ) : null}
+
+      {inputMode === "upload" ? (
         <form className="document-form upload-form" onSubmit={handleUpload}>
           <label>
             Title (optional)
@@ -194,7 +226,33 @@ export function DocumentsPage() {
             {isSubmitting ? "Uploading..." : "Upload document"}
           </button>
         </form>
-      )}
+      ) : null}
+
+      {inputMode === "url" ? (
+        <form className="document-form upload-form" onSubmit={handleUrlImport}>
+          <label>
+            Webpage URL
+            <input
+              placeholder="https://example.com/article"
+              type="url"
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.target.value)}
+            />
+          </label>
+          <label>
+            Title (optional)
+            <input
+              placeholder="Defaults to the page title"
+              value={urlTitle}
+              onChange={(event) => setUrlTitle(event.target.value)}
+            />
+          </label>
+          <p className="muted upload-help">Imports one public server-rendered HTML page.</p>
+          <button type="submit" disabled={isSubmitting || !sourceUrl.trim()}>
+            {isSubmitting ? "Importing..." : "Import URL"}
+          </button>
+        </form>
+      ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
       {isLoading ? <p className="muted">Loading documents...</p> : null}
@@ -220,6 +278,21 @@ export function DocumentsPage() {
                 {document.file_size !== null ? <span>{formatFileSize(document.file_size)}</span> : null}
               </div>
             ) : null}
+            {document.source_kind === "url" ? (
+              <div className="document-metadata">
+                <span>URL</span>
+                {document.source_domain ? <span>{document.source_domain}</span> : null}
+                {document.fetch_provider ? <span>provider: {document.fetch_provider}</span> : null}
+                {document.http_status ? <span>HTTP {document.http_status}</span> : null}
+                <span className="ingestion-status">{document.ingestion_status}</span>
+                {document.fetched_at ? <span>{formatDate(document.fetched_at)}</span> : null}
+                {document.source_url ? (
+                  <a href={document.source_url} target="_blank" rel="noopener noreferrer">
+                    Source
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             <p>{document.content}</p>
             <small>{document.chunks.length} chunk(s)</small>
           </article>
@@ -234,4 +307,11 @@ function formatFileSize(bytes: number): string {
   const kilobytes = bytes / 1024;
   if (kilobytes < 1024) return `${kilobytes.toFixed(kilobytes >= 10 ? 0 : 1)} KB`;
   return `${(kilobytes / 1024).toFixed(1)} MB`;
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

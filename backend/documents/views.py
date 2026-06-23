@@ -1,11 +1,11 @@
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from config.throttles import ConfiguredScopedRateThrottle
 from documents.models import Document
-from documents.serializers import DocumentSerializer, DocumentUploadSerializer
+from documents.serializers import DocumentSerializer, DocumentUploadSerializer, DocumentUrlSerializer
 
 
 class DocumentViewSet(
@@ -23,6 +23,9 @@ class DocumentViewSet(
         if self.action in {"create", "upload"}:
             self.throttle_scope = "document_create"
             throttles.append(ConfiguredScopedRateThrottle())
+        if self.action == "url":
+            self.throttle_scope = "document_url_create"
+            throttles.append(ConfiguredScopedRateThrottle())
         return throttles
 
     @action(
@@ -32,6 +35,21 @@ class DocumentViewSet(
     )
     def upload(self, request):
         serializer = DocumentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save()
+        return Response(
+            DocumentSerializer(document, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        parser_classes=[JSONParser],
+        url_path="url",
+    )
+    def url(self, request):
+        serializer = DocumentUrlSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         document = serializer.save()
         return Response(

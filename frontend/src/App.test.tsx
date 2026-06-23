@@ -226,6 +226,59 @@ describe("App", () => {
     expect((requestOptions.headers as Headers).has("Content-Type")).toBe(false);
   });
 
+  it("imports a URL and displays source metadata", async () => {
+    const urlDocument = {
+      id: 4,
+      title: "Imported article",
+      source_type: "url",
+      source_kind: "url",
+      content: "Public webpage evidence for market research.",
+      original_filename: "",
+      file_type: "",
+      file_size: null,
+      source_url: "https://example.com/article",
+      source_domain: "example.com",
+      fetched_at: "2026-01-01T12:00:00Z",
+      fetch_provider: "direct",
+      http_status: 200,
+      content_type: "text/html",
+      ingestion_status: "completed",
+      ingestion_error: "",
+      created_at: "2026-01-01T12:00:00Z",
+      updated_at: "2026-01-01T12:00:00Z",
+      chunks: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(urlDocument), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: /documents/i }));
+    await userEvent.click(screen.getByRole("button", { name: /import url/i }));
+    await userEvent.type(screen.getByLabelText(/webpage url/i), "https://example.com/article");
+    await userEvent.type(screen.getByLabelText(/title \(optional\)/i), "Imported article");
+    await userEvent.click(screen.getAllByRole("button", { name: /import url/i })[1]);
+
+    expect(await screen.findByText("Imported article")).toBeInTheDocument();
+    expect(screen.getByText("URL")).toBeInTheDocument();
+    expect(screen.getByText("example.com")).toBeInTheDocument();
+    expect(screen.getByText("provider: direct")).toBeInTheDocument();
+    expect(screen.getByText("HTTP 200")).toBeInTheDocument();
+
+    const sourceLink = screen.getByRole("link", { name: /source/i });
+    expect(sourceLink).toHaveAttribute("href", "https://example.com/article");
+    expect(sourceLink).toHaveAttribute("target", "_blank");
+    expect(sourceLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    const requestOptions = fetchMock.mock.calls[2][1] as RequestInit;
+    expect(requestOptions.body).toBe(
+      JSON.stringify({ url: "https://example.com/article", title: "Imported article" }),
+    );
+  });
+
   it("shows upload field validation errors", async () => {
     vi.stubGlobal(
       "fetch",

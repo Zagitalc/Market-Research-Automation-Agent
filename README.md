@@ -2,7 +2,7 @@
 
 A working AI engineering portfolio demo for automated market research. The application combines a Django REST Framework backend, a React + TypeScript dashboard, PostgreSQL persistence, and LangGraph orchestration in an inspectable end-to-end research workflow.
 
-Documents can be pasted or uploaded as TXT, Markdown, and text-based PDF files, then are chunked for RAG retrieval. Mock mode uses deterministic lexical relevance, while OpenAI mode uses embedding similarity with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, retained-source cleanup, cascade deletion, and deployment-oriented API rate limiting.
+Documents can be pasted, uploaded as TXT/Markdown/text-based PDF files, or imported from controlled single-page public webpages, then are chunked for RAG retrieval. Mock mode uses deterministic lexical relevance, while OpenAI mode uses embedding similarity with keyword fallback when embeddings are unavailable. Research runs evaluate evidence quality, retry weak retrieval once, generate confidence-scored answers, attach structured citation markers, and preserve every agent step for review. OpenAI integration is optional, while deterministic mock mode keeps local development and public demos usable without API keys. The app also includes document and history management, retained-source cleanup, cascade deletion, SSRF-aware URL import controls, and deployment-oriented API rate limiting.
 
 ## Live Demo
 
@@ -27,11 +27,12 @@ AI research tools are being adopted fastest by marketing, retail, customer insig
 - **LangGraph research workflow:** typed `plan`, `retrieve`, `tool_call`, `reflect`, and `final` nodes with conditional weak-evidence retry.
 - **RAG document pipeline:** automatic chunking, deterministic lexical ranking in mock mode, and OpenAI embedding similarity with keyword fallback.
 - **File ingestion:** synchronous TXT, Markdown, and text-based PDF extraction with retained originals, configurable size limits, and collision-safe storage.
+- **Controlled URL ingestion:** import individual public server-rendered HTML pages through HTTPX, Beautiful Soup cleanup, Trafilatura extraction, robots.txt checks, request limits, and SSRF/private-network blocking.
 - **Evidence quality controls:** a retrieval-score threshold, one refined-query retry, and distinct strong- and weak-evidence confidence scores.
 - **Structured citations:** final answers use `[1]`, `[2]`, and `[3]` markers linked to ranked evidence cards and persisted source metadata.
 - **Optional OpenAI integration:** OpenAI embeddings and answer synthesis when configured, with safe mock fallback if credentials or provider calls are unavailable.
 - **Auditable research history:** every run, graph step, input, output, answer, confidence score, and diagnostic error is persisted.
-- **Knowledge-base management:** paste or upload sources, inspect ingestion metadata, and delete or clear documents with cascading chunk and source-file cleanup.
+- **Knowledge-base management:** paste, upload, or import sources, inspect ingestion metadata, and delete or clear documents with cascading chunk and source-file cleanup.
 - **Deployment safeguards:** scoped DRF throttling for expensive creation endpoints and friendly HTTP 429 handling in React.
 - **Full-stack test coverage:** pytest for Django APIs and services, plus Vitest for dashboard workflows and error states.
 
@@ -178,6 +179,13 @@ README.md
 | `RESEARCH_RUN_CREATE_RATE` | `5/min` | Stricter limit for creating research runs. |
 | `DOCUMENT_CREATE_RATE` | `20/min` | Limit for document creation. |
 | `DOCUMENT_UPLOAD_MAX_BYTES` | `5242880` | Maximum uploaded document size in bytes (5 MB by default). |
+| `WEB_FETCH_PROVIDER` | `direct` | URL ingestion fetch provider. Only `direct` is implemented in v1. |
+| `URL_INGESTION_TIMEOUT_SECONDS` | `10` | Timeout for URL ingestion HTTP requests. |
+| `URL_INGESTION_MAX_BYTES` | `2097152` | Maximum webpage response size in bytes. |
+| `URL_INGESTION_ROBOTS_MAX_BYTES` | `262144` | Maximum robots.txt response size in bytes. |
+| `URL_INGESTION_MAX_REDIRECTS` | `3` | Maximum manual redirects during URL ingestion. |
+| `URL_INGESTION_USER_AGENT` | `MarketResearchAutomationAgent/1.0` | User-Agent used for URL and robots.txt requests. |
+| `URL_DOCUMENT_THROTTLE_RATE` | `5/min` | Dedicated throttle for URL imports. |
 
 Mock mode:
 
@@ -199,16 +207,32 @@ If `AI_MOCK_MODE=false` but no key is present, the backend falls back to mock mo
 
 ## File Ingestion
 
-The Documents workspace supports two input paths:
+The Documents workspace supports three input paths:
 
 - **Paste text:** manually enter a title, source type, and document content.
 - **Upload file:** upload a UTF-8 `.txt`, UTF-8 `.md`, or text-based `.pdf` file.
+- **Import URL:** import one public server-rendered HTML webpage.
 
 The upload title is optional. A non-empty supplied title is used after trimming whitespace; otherwise the filename stem becomes the title. For example, `uk-ev-market-brief.pdf` becomes `uk-ev-market-brief`.
 
 Uploads are processed synchronously. The backend validates the extension and configured size limit, extracts text, retains the original through collision-safe Django storage, and reuses the existing chunking and embedding pipeline. Uploaded originals are removed when their document is deleted or the knowledge base is cleared. The API exposes filename, type, size, and ingestion status metadata, but does not expose a source-file download URL.
 
 PDF ingestion supports files that already contain extractable text. Scanned PDFs require OCR and are intentionally rejected in v1. Encrypted, malformed, empty, unsupported, oversized, or non-UTF-8 text files return validation errors without creating a document.
+
+## URL Ingestion
+
+URL ingestion supports controlled ingestion of individual public webpages. The backend validates the destination, checks robots.txt, fetches bounded HTML with HTTPX, performs conservative Beautiful Soup cleanup, extracts readable main content with Trafilatura, and feeds the cleaned text into the existing document, chunking, embedding, retrieval, citation, and LangGraph workflow.
+
+The feature is intentionally limited:
+
+- Supports public `http` and `https` server-rendered HTML pages only.
+- Does not run JavaScript, use browser automation, crawl links, import authenticated pages, rotate proxies, bypass CAPTCHA/anti-bot systems, or call hosted scraping providers.
+- Blocks localhost, loopback, private, link-local, multicast, reserved, unspecified, unsafe-port, credential-bearing, and malformed destinations.
+- Handles redirects manually and revalidates each redirect destination before requesting it.
+- Uses a bounded robots.txt fetch with the same destination safety rules as page fetches.
+- Rejects non-HTML, oversized, HTTP-error, timeout, robots-disallowed, and textless pages without creating partial document or chunk rows.
+
+DNS is resolved and validated immediately before each request. DNS rebinding remains a residual v1 limitation because the implementation does not pin the validated address while preserving the original Host header and TLS hostname.
 
 ## Mock-Mode Public Deployment
 
@@ -297,6 +321,13 @@ API_ANON_RATE=120/min
 RESEARCH_RUN_CREATE_RATE=5/min
 DOCUMENT_CREATE_RATE=20/min
 DOCUMENT_UPLOAD_MAX_BYTES=5242880
+WEB_FETCH_PROVIDER=direct
+URL_INGESTION_TIMEOUT_SECONDS=10
+URL_INGESTION_MAX_BYTES=2097152
+URL_INGESTION_ROBOTS_MAX_BYTES=262144
+URL_INGESTION_MAX_REDIRECTS=3
+URL_INGESTION_USER_AGENT=MarketResearchAutomationAgent/1.0
+URL_DOCUMENT_THROTTLE_RATE=5/min
 
 DJANGO_SECURE_SSL_REDIRECT=true
 DJANGO_SESSION_COOKIE_SECURE=true
@@ -340,8 +371,8 @@ CSRF_TRUSTED_ORIGINS=https://<your-frontend>.onrender.com
 ### 4. Verify the Live Demo
 
 1. Open the Render frontend URL.
-2. Upload a TXT file containing market-research evidence.
-3. Confirm its filename, file type, status, and chunks appear.
+2. Upload a TXT file containing market-research evidence, or import one cooperative public HTML article URL.
+3. Confirm its filename or URL metadata, status, and chunks appear.
 4. Ask `Which teams are adopting AI research tools fastest?`.
 5. Confirm an evidence card and LangGraph timeline appear.
 6. Ask an unrelated question such as `How many holes do we have in Mars?`.
@@ -408,6 +439,7 @@ CI never requires an OpenAI API key and does not make real OpenAI calls or uploa
 | GET | `/api/documents/` | List documents |
 | POST | `/api/documents/` | Create a document, chunks, and chunk embeddings |
 | POST | `/api/documents/upload/` | Upload a TXT, Markdown, or text-based PDF document using multipart form data |
+| POST | `/api/documents/url/` | Import one public HTML webpage into the document/RAG pipeline |
 | GET | `/api/documents/<id>/` | Retrieve one document |
 | DELETE | `/api/documents/<id>/` | Delete one document and cascade-delete its chunks |
 | DELETE | `/api/documents/clear/` | Delete all documents and chunks |
@@ -445,11 +477,12 @@ Retrieved chunks receive sequential numeric `citation_id` values in relevance or
 
 1. Start the Docker stack and open <http://localhost:5173>.
 2. Open **Documents**, switch to **Upload file**, and upload `ai-tools.txt`, `ev-market.md`, and `food-trends.txt`. Point out the filename, file type, completed status, automatic chunk count, and persisted knowledge-base cards.
-3. Open **Research** and ask which teams are adopting AI research tools fastest, what drives UK EV adoption, and what trends are appearing in UK restaurants. Show that each answer retrieves evidence from the corresponding uploaded source.
-4. Scroll through the agent timeline to demonstrate the saved plan, retrieval, tool call, reflection threshold, and final payload.
-5. Submit an unrelated question. Show the second retrieval attempt, explicit insufficiency wording, and 35% confidence.
-6. Submit research requests repeatedly to demonstrate the friendly rate-limit banner after the configured threshold.
-7. Delete one uploaded document and confirm its retained source file is removed. Then use **Clear all** and **Clear history** to demonstrate confirmed file, chunk, and agent-step cleanup.
+3. Switch to **Import URL** and import a cooperative public article page. Point out the URL badge, source domain, HTTP status, provider, fetched date, safe source link, and chunk count.
+4. Open **Research** and ask which teams are adopting AI research tools fastest, what drives UK EV adoption, and what trends are appearing in UK restaurants. Show that each answer retrieves evidence from the corresponding uploaded or imported source.
+5. Scroll through the agent timeline to demonstrate the saved plan, retrieval, tool call, reflection threshold, and final payload.
+6. Submit an unrelated question. Show the second retrieval attempt, explicit insufficiency wording, and 35% confidence.
+7. Submit research requests repeatedly to demonstrate the friendly rate-limit banner after the configured threshold.
+8. Delete one uploaded/imported document and confirm cleanup. Then use **Clear all** and **Clear history** to demonstrate confirmed file, chunk, and agent-step cleanup.
 
 ## pgvector Readiness
 
@@ -459,7 +492,7 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 
 - Enable pgvector similarity search with indexed vector columns.
 - Add richer structure-aware chunking.
-- Add OCR, URL ingestion, and asynchronous ingestion jobs.
+- Add OCR, asynchronous ingestion jobs, and optional hosted scraping-provider integrations.
 - Add authentication and per-user research runs.
 - Add LangGraph checkpointing or streaming when the workflow needs resumable or live-running agent traces.
 - Add async execution with Celery, Django-Q, or a workflow runner.
@@ -468,5 +501,5 @@ Docker Compose uses `pgvector/pgvector:pg16`. The current `DocumentChunk.embeddi
 ## CV-Ready Project Bullets
 
 - Built a full-stack market research automation platform using Django REST Framework, React, TypeScript, PostgreSQL, Docker Compose, and LangGraph.
-- Implemented TXT, Markdown, and text-based PDF ingestion with collision-safe retained storage, automatic chunking, deterministic mock lexical retrieval, OpenAI embedding similarity, evidence thresholds, retry routing, confidence scoring, and structured citations.
+- Implemented TXT, Markdown, text-based PDF, and controlled public webpage ingestion with collision-safe retained storage, automatic chunking, deterministic mock lexical retrieval, OpenAI embedding similarity, evidence thresholds, retry routing, confidence scoring, and structured citations.
 - Added optional OpenAI synthesis with mock-first fallback, persisted agent observability, cascade-safe data management, scoped API throttling, and automated pytest/Vitest coverage.

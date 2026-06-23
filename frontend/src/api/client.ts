@@ -13,10 +13,17 @@ export type DocumentRecord = {
   id: number;
   title: string;
   source_type: string;
+  source_kind: "manual" | "upload" | "url";
   content: string;
   original_filename: string;
   file_type: string;
   file_size: number | null;
+  source_url: string;
+  source_domain: string;
+  fetched_at: string | null;
+  fetch_provider: string;
+  http_status: number | null;
+  content_type: string;
   ingestion_status: "completed";
   ingestion_error: string;
   created_at: string;
@@ -75,6 +82,11 @@ type CreateDocumentInput = {
   title: string;
   source_type: string;
   content: string;
+};
+
+type ImportUrlInput = {
+  url: string;
+  title: string;
 };
 
 export type ClearResponse = {
@@ -151,6 +163,14 @@ export const api = {
       body: formData,
     });
   },
+  importUrl: (input: ImportUrlInput) =>
+    request<DocumentRecord>("/documents/url/", {
+      method: "POST",
+      body: JSON.stringify({
+        url: input.url.trim(),
+        title: input.title.trim(),
+      }),
+    }),
   deleteDocument: (id: number) =>
     request(`/documents/${id}/`, {
       method: "DELETE",

@@ -113,6 +113,15 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DOCUMENT_UPLOAD_MAX_BYTES = int(os.getenv("DOCUMENT_UPLOAD_MAX_BYTES", str(5 * 1024 * 1024)))
+WEB_FETCH_PROVIDER = os.getenv("WEB_FETCH_PROVIDER", "direct")
+URL_INGESTION_TIMEOUT_SECONDS = float(os.getenv("URL_INGESTION_TIMEOUT_SECONDS", "10"))
+URL_INGESTION_MAX_BYTES = int(os.getenv("URL_INGESTION_MAX_BYTES", str(2 * 1024 * 1024)))
+URL_INGESTION_ROBOTS_MAX_BYTES = int(os.getenv("URL_INGESTION_ROBOTS_MAX_BYTES", str(256 * 1024)))
+URL_INGESTION_MAX_REDIRECTS = int(os.getenv("URL_INGESTION_MAX_REDIRECTS", "3"))
+URL_INGESTION_USER_AGENT = os.getenv(
+    "URL_INGESTION_USER_AGENT",
+    "MarketResearchAutomationAgent/1.0",
+)
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
@@ -125,6 +134,7 @@ REST_FRAMEWORK = {
         "anon": os.getenv("API_ANON_RATE", "120/min"),
         "research_run_create": os.getenv("RESEARCH_RUN_CREATE_RATE", "5/min"),
         "document_create": os.getenv("DOCUMENT_CREATE_RATE", "20/min"),
+        "document_url_create": os.getenv("URL_DOCUMENT_THROTTLE_RATE", "5/min"),
     },
     "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
 }

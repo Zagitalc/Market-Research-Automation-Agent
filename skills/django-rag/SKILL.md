@@ -1,13 +1,13 @@
 ---
 name: django-rag
-description: Use when modifying Django RAG, retrieval, embeddings, OpenAI/mock mode, document chunking, file ingestion, upcoming URL ingestion, citations, LangGraph workflow, or research agent behavior in this repository.
+description: Use when modifying Django RAG, retrieval, embeddings, OpenAI/mock mode, document chunking, file ingestion, URL ingestion, citations, LangGraph workflow, or research agent behavior in this repository.
 ---
 
 # Django RAG Skill
 
 ## Purpose
 
-Use this skill when working on the Market Research Automation Agent backend, document ingestion, upcoming controlled URL ingestion, RAG retrieval, embeddings, citations, or LangGraph research workflow.
+Use this skill when working on the Market Research Automation Agent backend, document ingestion, controlled URL ingestion, RAG retrieval, embeddings, citations, or LangGraph research workflow.
 
 ## Rules
 
@@ -35,10 +35,10 @@ Use this skill when working on the Market Research Automation Agent backend, doc
 - `backend/documents/services/chunker.py`
 - `backend/documents/services/retriever.py`
 - `backend/documents/services/ingestion.py`
-- `backend/documents/services/web_fetch/base.py` when URL ingestion is implemented
-- `backend/documents/services/web_fetch/direct.py` when URL ingestion is implemented
-- `backend/documents/services/web_fetch/factory.py` when URL ingestion is implemented
-- `backend/documents/services/web_fetch/exceptions.py` when URL ingestion is implemented
+- `backend/documents/services/web_fetch/base.py`
+- `backend/documents/services/web_fetch/direct.py`
+- `backend/documents/services/web_fetch/factory.py`
+- `backend/documents/services/web_fetch/exceptions.py`
 - `backend/documents/serializers.py`
 - `backend/documents/views.py`
 - `backend/documents/models.py`
@@ -83,7 +83,7 @@ The app currently includes:
 - Document creation/list/delete/clear
 - Research run creation/list/delete/clear
 - TXT, Markdown, and text-based PDF upload ingestion
-- controlled single-page public webpage ingestion is an approved upcoming milestone, not yet implemented
+- controlled single-page public webpage ingestion
 - Retained original uploaded files in Django media storage
 - Automatic document chunking
 - JSONField-backed embeddings
@@ -126,8 +126,7 @@ The app supports document ingestion through:
 - uploaded `.txt`
 - uploaded `.md`
 - uploaded text-based `.pdf`
-
-The upcoming URL-ingestion milestone may add controlled ingestion for individual public webpages.
+- imported individual public webpages
 
 When modifying ingestion:
 
@@ -144,7 +143,7 @@ When modifying ingestion:
 
 ## URL-ingestion rules
 
-When URL ingestion is implemented, preserve these constraints:
+When modifying URL ingestion, preserve these constraints:
 
 - Treat it as an additional ingestion path alongside pasted text and uploaded files, not a separate RAG pipeline.
 - Use the shared flow: validate destination -> check robots.txt -> fetch -> extract and clean text -> create `Document` -> chunk -> embed -> retrieve -> cite -> use in LangGraph.
