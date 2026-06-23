@@ -26,7 +26,7 @@ Make the project easy to understand for recruiters, hiring managers, and AI engi
 - Screenshots.
 - Future roadmap.
 
-When controlled single-page public webpage ingestion is implemented, README and demo materials should also explain:
+README and demo materials should also explain controlled single-page public webpage ingestion:
 
 - URL import form.
 - Imported source metadata.
@@ -50,7 +50,7 @@ Use strong engineering language:
 - Integrated LangGraph orchestration...
 - Implemented document ingestion...
 
-After the URL-ingestion milestone is implemented, suitable wording is:
+Suitable URL-ingestion wording is:
 
 "Implemented controlled public-web ingestion using HTTPX, Beautiful Soup, main-content extraction, robots.txt checks, SSRF protection, and integration with an evidence-backed RAG workflow."
 
@@ -69,7 +69,7 @@ Position this as:
 
 "An internal AI automation platform prototype for market research workflows, using Django, React, RAG-style retrieval, optional OpenAI integration, LangGraph orchestration, document ingestion, evidence citations, and traceable agent steps."
 
-After implementation, URL ingestion can be described as controlled single-page public webpage ingestion.
+URL ingestion can be described as controlled single-page public webpage ingestion.
 
 ## Screenshot guidance
 
@@ -84,7 +84,7 @@ Prioritise screenshots that show:
 - Delete/clear controls.
 - Rate-limit message.
 
-After URL ingestion is implemented, also consider screenshots for:
+Also consider URL-ingestion screenshots for:
 
 - URL import form.
 - Imported source metadata.

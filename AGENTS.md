@@ -14,7 +14,7 @@ It is a full-stack Django + React application demonstrating:
 - JSONField embeddings for current RAG v1
 - React evidence/timeline UI
 - document ingestion for TXT, Markdown, and text-based PDF uploads
-- upcoming controlled single-page public webpage ingestion through direct HTTP/HTTPS fetching and readable HTML extraction
+- controlled single-page public webpage ingestion through direct HTTP/HTTPS fetching and readable HTML extraction
 - deployment-safety rate limiting
 
 ## Tech stack
@@ -28,8 +28,6 @@ Backend:
 - LangGraph
 - JSONField embeddings for current RAG v1
 - pypdf for text-based PDF extraction
-
-Proposed dependencies for the upcoming URL-ingestion milestone:
 - httpx
 - beautifulsoup4
 - trafilatura
@@ -52,7 +50,7 @@ DevOps:
 - Do not add authentication unless explicitly requested.
 - Do not change LangGraph workflow/routing unless explicitly requested.
 - Do not migrate to pgvector unless explicitly requested.
-- Do not add OCR, URL ingestion, or background jobs unless explicitly requested; controlled single-page URL ingestion is permitted only for the explicitly requested URL-ingestion milestone.
+- Do not add OCR, background jobs, multi-page crawling, JavaScript rendering, or hosted scraping providers unless explicitly requested.
 - Do not expose uploaded source-file download URLs unless explicitly requested.
 - Preserve existing API routes unless the task explicitly requires changing them.
 - Preserve mock mode, OpenAI mode, RAG retrieval, LangGraph retry, delete/clear controls, file ingestion, and rate limiting unless explicitly requested.
@@ -71,9 +69,9 @@ cd backend
 .venv/bin/pytest
 ```
 
-## Upcoming URL-ingestion rules
+## URL-ingestion rules
 
-When controlled URL ingestion is implemented, keep it limited to individual public HTTP/HTTPS webpages and feed extracted text into the existing document, chunking, embedding, retrieval, citation, and LangGraph workflow.
+Keep URL ingestion limited to individual public HTTP/HTTPS webpages and feed extracted text into the existing document, chunking, embedding, retrieval, citation, and LangGraph workflow.
 
 - Do not add JavaScript rendering, Playwright, Selenium, multi-page crawling, link following, authenticated/login-page scraping, CAPTCHA or anti-bot bypass, proxy rotation, hosted scraping-provider integration, scheduled scraping, background jobs, OCR, or pgvector migration unless explicitly requested.
 - Do not store cookies, authorization headers, credentials, hosted-provider keys, or unnecessary raw response headers.

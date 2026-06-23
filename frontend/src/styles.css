@@ -263,6 +263,14 @@ button:disabled {
   padding: 4px 8px;
 }
 
+.document-metadata a {
+  border-radius: 999px;
+  background: #eaf1ff;
+  color: #263a5f;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+
 .document-metadata .ingestion-status {
   background: #e7f8ef;
   color: #137a44;

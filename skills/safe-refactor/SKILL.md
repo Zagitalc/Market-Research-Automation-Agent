@@ -16,14 +16,14 @@ description: Use when refactoring existing code while preserving current behavio
 - Preserve LangGraph routing and weak-evidence retry unless explicitly changing it.
 - Preserve document ingestion, delete/clear, and rate limiting behavior.
 - Do not expose uploaded source-file URLs unless explicitly requested.
-- When URL ingestion is implemented, preserve its security controls and do not bypass destination validation, redirect revalidation, DNS/IP blocking, robots.txt denial handling, throttling, duplicate normalized-URL handling, or failure-without-persistence.
+- Preserve URL ingestion security controls and do not bypass destination validation, redirect revalidation, DNS/IP blocking, robots.txt denial handling, throttling, duplicate normalized-URL handling, or failure-without-persistence.
 - Do not commit `.env`, secrets, generated media files, or uploaded originals.
 - Update tests when behaviour changes.
 - Explain any intentional breaking changes before applying them.
 
 ## URL-ingestion refactor rules
 
-When refactoring future URL-ingestion code:
+When refactoring URL-ingestion code:
 
 - Preserve existing document and research API route compatibility.
 - Preserve manual text creation and file upload behavior.
