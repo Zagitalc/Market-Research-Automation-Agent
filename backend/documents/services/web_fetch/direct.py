@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 import socket
 from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
@@ -21,6 +22,7 @@ from documents.services.web_fetch.exceptions import (
 )
 
 
+logger = logging.getLogger(__name__)
 SAFE_PORTS = {80, 443}
 
 
@@ -46,10 +48,23 @@ class DirectWebFetchProvider:
                 require_html=False,
                 allow_http_errors=True,
             )
-        except (FetchTimeoutError, FetchNetworkError, FetchHTTPError, OversizedResponseError):
+        except (FetchTimeoutError, FetchNetworkError, FetchHTTPError, OversizedResponseError) as exc:
+            log_fetch_diagnostic(
+                "url_ingestion_robots_unavailable_allowed",
+                robots_url,
+                reason=type(exc).__name__,
+                level=logging.INFO,
+            )
             return
 
         if result.status_code >= 400:
+            log_fetch_diagnostic(
+                "url_ingestion_robots_unavailable_allowed",
+                robots_url,
+                reason="HTTPStatus",
+                status_code=result.status_code,
+                level=logging.INFO,
+            )
             return
 
         parser = RobotFileParser()
@@ -84,8 +99,18 @@ class DirectWebFetchProvider:
             try:
                 response = self._send_request(current_url, max_bytes=max_bytes)
             except httpx.TimeoutException as exc:
+                log_fetch_diagnostic(
+                    "url_ingestion_fetch_failed",
+                    current_url,
+                    reason=type(exc).__name__,
+                )
                 raise FetchTimeoutError() from exc
             except (httpx.HTTPError, OSError) as exc:
+                log_fetch_diagnostic(
+                    "url_ingestion_fetch_failed",
+                    current_url,
+                    reason=type(exc).__name__,
+                )
                 raise FetchNetworkError() from exc
 
             if 300 <= response.status_code < 400 and response.headers.get("location"):
@@ -95,10 +120,23 @@ class DirectWebFetchProvider:
                 continue
 
             if not allow_http_errors and response.status_code >= 400:
+                log_fetch_diagnostic(
+                    "url_ingestion_http_error",
+                    current_url,
+                    reason="HTTPStatus",
+                    status_code=response.status_code,
+                )
                 raise FetchHTTPError("The webpage returned an unsuccessful HTTP response.")
 
             content_type = response.headers.get("content-type", "")
             if require_html and not is_html_content_type(content_type):
+                log_fetch_diagnostic(
+                    "url_ingestion_unsupported_content_type",
+                    current_url,
+                    reason="UnsupportedContentType",
+                    status_code=response.status_code,
+                    content_type=content_type,
+                )
                 raise UnsupportedContentTypeError()
 
             return FetchResult(
@@ -155,10 +193,11 @@ def normalize_url_for_fetch(url: str) -> str:
     if port is not None and port not in SAFE_PORTS:
         raise BlockedDestinationError("This URL uses an unsupported port.")
 
-    hostname = parts.hostname.lower().encode("idna").decode("ascii")
-    netloc = hostname
+    hostname = normalize_hostname(parts.hostname)
+    netloc_host = f"[{hostname}]" if is_ipv6_literal(hostname) else hostname
+    netloc = netloc_host
     if port and not is_default_port(parts.scheme.lower(), port):
-        netloc = f"{hostname}:{port}"
+        netloc = f"{netloc_host}:{port}"
     path = parts.path or "/"
     return urlunsplit((parts.scheme.lower(), netloc, path, parts.query, ""))
 
@@ -218,3 +257,44 @@ def is_default_port(scheme: str, port: int) -> bool:
 
 def is_html_content_type(content_type: str) -> bool:
     return "text/html" in content_type.lower() or "application/xhtml+xml" in content_type.lower()
+
+
+def normalize_hostname(hostname: str) -> str:
+    try:
+        return str(ipaddress.ip_address(hostname))
+    except ValueError:
+        return hostname.lower().encode("idna").decode("ascii")
+
+
+def is_ipv6_literal(hostname: str) -> bool:
+    try:
+        return isinstance(ipaddress.ip_address(hostname), ipaddress.IPv6Address)
+    except ValueError:
+        return False
+
+
+def log_fetch_diagnostic(
+    event: str,
+    url: str,
+    *,
+    reason: str,
+    status_code: int | None = None,
+    content_type: str = "",
+    level: int = logging.WARNING,
+) -> None:
+    parts = urlsplit(normalize_url_for_fetch(url))
+    logger.log(
+        level,
+        event,
+        extra={
+            "url_ingestion_event": event,
+            "url_ingestion_reason": reason,
+            "url_ingestion_scheme": parts.scheme,
+            "url_ingestion_host": parts.hostname or "",
+            "url_ingestion_port": parts.port,
+            "url_ingestion_path_length": len(parts.path or ""),
+            "url_ingestion_query_present": bool(parts.query),
+            "url_ingestion_status_code": status_code,
+            "url_ingestion_content_type": content_type[:100],
+        },
+    )

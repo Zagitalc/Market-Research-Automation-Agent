@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from documents.models import Document, DocumentChunk
 from documents.services.web_fetch import direct
+from documents.services.web_fetch.exceptions import BlockedDestinationError
 
 
 URL_THROTTLE_SETTINGS = {
@@ -66,6 +67,44 @@ def mock_fetch(monkeypatch, responses: dict[str, httpx.Response], seen: list[str
         return responses[url]
 
     monkeypatch.setattr(direct.DirectWebFetchProvider, "_send_request", fake_send)
+
+
+@pytest.mark.django_db
+def test_url_import_example_dot_com_root_with_robots_404_allowed(api_client, monkeypatch):
+    mock_fetch(
+        monkeypatch,
+        {
+            "https://example.com/robots.txt": response(
+                "https://example.com/robots.txt", 404, b"", "text/plain"
+            ),
+            "https://example.com/": response(
+                "https://example.com/",
+                200,
+                b"""
+                <html>
+                  <head><title>Example Domain</title></head>
+                  <body><h1>Example Domain</h1><p>This domain is for use in illustrative examples in documents.</p></body>
+                </html>
+                """,
+                "text/html; charset=utf-8",
+            ),
+        },
+    )
+
+    create_response = api_client.post(
+        "/api/documents/url/",
+        {"url": "https://example.com/"},
+        format="json",
+    )
+
+    assert create_response.status_code == 201
+    body = create_response.json()
+    assert body["title"] == "Example Domain"
+    assert body["source_url"] == "https://example.com/"
+    assert body["source_domain"] == "example.com"
+    assert "illustrative examples" in body["content"]
+    assert Document.objects.count() == 1
+    assert DocumentChunk.objects.count() == 1
 
 
 @pytest.mark.django_db
@@ -144,6 +183,34 @@ def test_url_import_uses_supplied_title(api_client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_robots_network_failure_allows_target_fetch(api_client, monkeypatch):
+    seen = []
+
+    def fake_send(self, url: str, *, max_bytes: int):
+        seen.append(url)
+        if url == "https://example.com/robots.txt":
+            raise httpx.ConnectError("robots connection failed", request=httpx.Request("GET", url))
+        return response(
+            "https://example.com/report",
+            200,
+            b"<html><body><p>Readable market research evidence from a public page.</p></body></html>",
+            "text/html",
+        )
+
+    monkeypatch.setattr(direct.DirectWebFetchProvider, "_send_request", fake_send)
+
+    create_response = api_client.post(
+        "/api/documents/url/",
+        {"url": "https://example.com/report"},
+        format="json",
+    )
+
+    assert create_response.status_code == 201
+    assert seen == ["https://example.com/robots.txt", "https://example.com/report"]
+    assert Document.objects.count() == 1
+
+
+@pytest.mark.django_db
 def test_duplicate_normalized_url_returns_conflict(api_client, monkeypatch):
     Document.objects.create(
         title="Existing",
@@ -197,6 +264,9 @@ def test_url_uniqueness_constraint_only_applies_to_url_documents():
         "http://169.254.169.254",
         "http://10.0.0.1",
         "http://192.168.1.1",
+        "http://[::1]/",
+        "http://[fe80::1]/",
+        "http://[2001:db8::1]/",
         "https://example.com:4443/article",
     ],
 )
@@ -226,6 +296,33 @@ def test_dns_resolution_to_blocked_address_is_rejected(api_client, monkeypatch):
 
     assert rejected_response.status_code == 400
     assert Document.objects.count() == 0
+
+
+def test_public_ip_validation_allows_global_ipv4_and_ipv6():
+    direct.validate_public_url("https://8.8.8.8/")
+    direct.validate_public_url("https://[2606:2800:220:1:248:1893:25c8:1946]/")
+
+
+def test_ipv6_literal_normalization_preserves_brackets():
+    assert (
+        direct.normalize_url_for_fetch("https://[2606:2800:220:1:248:1893:25c8:1946]/")
+        == "https://[2606:2800:220:1:248:1893:25c8:1946]/"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/",
+        "http://169.254.169.254/",
+        "http://[::1]/",
+        "http://[fe80::1]/",
+        "http://[2001:db8::1]/",
+    ],
+)
+def test_public_ip_validation_blocks_local_link_local_and_reserved_destinations(url):
+    with pytest.raises(BlockedDestinationError):
+        direct.validate_public_url(url)
 
 
 @pytest.mark.django_db
@@ -311,6 +408,42 @@ def test_non_html_response_creates_no_partial_records(api_client, monkeypatch):
     assert "html" in url_error(rejected_response).lower()
     assert Document.objects.count() == 0
     assert DocumentChunk.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_fetch_network_error_logs_safe_diagnostic(api_client, monkeypatch, caplog):
+    def fake_send(self, url: str, *, max_bytes: int):
+        if url == "https://example.com/robots.txt":
+            return response(url, 404, b"", "text/plain")
+        raise httpx.ConnectError(
+            "socket failed via 10.0.0.5 with response body <secret>",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(direct.DirectWebFetchProvider, "_send_request", fake_send)
+
+    with caplog.at_level("WARNING", logger="documents.services.web_fetch.direct"):
+        rejected_response = api_client.post(
+            "/api/documents/url/",
+            {"url": "https://example.com/report?token=secret"},
+            format="json",
+        )
+
+    assert rejected_response.status_code == 400
+    assert url_error(rejected_response) == "The webpage could not be reached."
+
+    fetch_record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "url_ingestion_event", "") == "url_ingestion_fetch_failed"
+    )
+    assert fetch_record.url_ingestion_reason == "ConnectError"
+    assert fetch_record.url_ingestion_host == "example.com"
+    assert fetch_record.url_ingestion_query_present is True
+    assert "10.0.0.5" not in fetch_record.message
+    assert "<secret>" not in fetch_record.message
+    assert "token=secret" not in fetch_record.message
+    assert Document.objects.count() == 0
 
 
 @pytest.mark.django_db
